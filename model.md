@@ -1,6 +1,6 @@
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs, and assign resource blocks to user equipments (UEs)
 ## Model
-We will be using a DQN to handle this problem, specifically it is a Markov Decision Process (MDP), i.e., the action taken will depend only on the present state, not past states. A DQN requires three structures:
+A DQN is used to solve this problem, specifically it is a Markov Decision Process (MDP), i.e., the action taken will depend only on the present state, not past states. A DQN requires three structures:
 ### 1. State Representation
 
 | Variables                    |                                                              |
@@ -59,7 +59,12 @@ p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,\mathcal{N}}\\
  p^{(t)}_{L,1}&  p^{(t)}_{L,2}&  \cdots& p^{(t)}_{L,\mathcal{N}}
 \end{bmatrix}
 ```
-where $p^{(t)}_{i,j}$ is the propagation delay and scheduling delay from DU $\mathcal{D}_i$ to RU $\mathcal{R}_j$.
+where 
+
+```math
+p^{(t)}_{i,j}=\text{propagation delay} + \text{scheduling delay}
+```
+from DU $\mathcal{D}_i$ to RU $\mathcal{R}_j$.
  
 We represent our state with the vector $s^{(t)}$:
 ```math
@@ -123,6 +128,9 @@ now we can represent our action space $\mathcal{A}$ as a vector:
 ```
 
 ### 3. Reward function
+Elaborate: Will we make a decision once every time interval or at every time step?
+
+Discourage switching DUs and RUs too frequently.
 
 For the reward function, we want to penalize:
 - Assigning RUs to more than one DU
@@ -132,27 +140,31 @@ For the reward function, we want to penalize:
 
 Define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RC switch}} + \mathfrak{R}_{\text{DU switch}}-|\mathcal{R}_\text{activated}|
+\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-|\mathcal{R}_\text{activated}|-|\mathcal{D}_\text{activated}|
 ```
 where
 ```math
 \mathfrak{R}_{\text{assignment}} = 5 - 5 | \delta_{\text{violated}} |
 ```
 ```math
-\mathfrak{R}_{\text{RC switch}} = \begin{cases}
-30 & \text{RSS} \geq -65 \\
--25 & \text{otherwise}
+\mathfrak{R}_{\text{RU power}} = \begin{cases}
+60 & \text{RSS} \geq -65 \\
+-30 & \text{otherwise}
 \end{cases}
 ```
 ```math
-\mathfrak{R}_{\text{DU switch}} = \begin{cases}
-15 & \text{The DU does not serve any RUs} \\
+\mathfrak{R}_{\text{DU power}} = \begin{cases}
+45 & \text{The DU does not serve any RUs} \\
 -50 & \text{otherwise}
 \end{cases}
 ```
 ```math
 \mathcal{R}_\text{activated}=\text{the set of active RUs}
 ```
+```math
+\mathcal{D}_\text{activated}=\text{the set of active DUs}
+```
+
 $| \delta_{\text{violated}} |$ is the number of delay budgets that were violated.
 - For example, if assigning an RU to a DU increased propagation delay to $x$, and $x$ violated the delay budget for URLLC traffic (2ms) and for eMBB (4ms), but not V2X (5ms), then $|\delta_{\text{violated}}|=2$.
 ## Testbed
