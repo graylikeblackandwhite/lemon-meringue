@@ -19,31 +19,39 @@ We will be using a DQN to handle this problem, specifically it is a Markov Decis
 The $\mathcal{K}$ RUs are connected to $L$ DUs through a mesh topology, so these RUs can choose particular DUs to perform their higher-level physical layer functions.
 
 At time $t$, define the channel quality matrix $\mathcal{H}^{(t)} \in \mathbb{R}^{\mathcal{M} \times \mathcal{K}}$:
-$$\mathcal{H}^{(t)}=\begin{bmatrix}
+
+```math
+\mathcal{H}^{(t)}=\begin{bmatrix}
 h^{(t)}_{1,1} &  h^{(t)}_{1,2} &  \cdots &  h^{(t)}_{1,K}\\
 h^{(t)}_{2,1} &  h^{(t)}_{2,2} &  \cdots &  h^{(t)}_{2,K}\\
 \vdots  &  \vdots &  \ddots &  \vdots\\
 h^{(t)}_{\mathcal{M},1} &  h^{(t)}_{\mathcal{M},2} & \cdots & h^{(t)}_{\mathcal{M},K}
-\end{bmatrix}$$
+\end{bmatrix}
+```
 where $h^{(t)}_{i,j}$ is the RSS from radio card $r_i$ to UE $u_j$ at time $t$.
 
-At time $t$, define the geolocation matrix $G^{(t)} \in \mathbb{R}^{\mathcal{K} \times 2}$:$$G^{(t)}=\begin{bmatrix}
+At time $t$, define the geolocation matrix $G^{(t)} \in \mathbb{R}^{\mathcal{K} \times 2}$:
+
+```math
+G^{(t)}=\begin{bmatrix}
 x_1^{(t)} & y_1^{(t)} \\
 x_2^{(t)} & y_2^{(t)} \\
 \vdots & \vdots  \\
 x_{\mathcal{K}}^{(t)} & y_{\mathcal{K}} ^{(t)}
-\end{bmatrix}$$where $x_i^{(t)}, y_i^{(t)}$ represents the geolocation of UE $u_i$ at time $t$.
+\end{bmatrix}
+```
+where $x_i^{(t)}, y_i^{(t)}$ represents the geolocation of UE $u_i$ at time $t$.
 
 At time $t$, define the connection quality vector $\mathcal{V}^{(t)}$:
 
-$$
+```math
 \mathcal{V}^{(t)}=[G^{(t)}(1,:)\mathcal{H}^{(t)}(:,1),G^{(t)}(2,:) \mathcal{H}^{(t)}(:,2),
 \dots,
 G^{(t)}(\mathcal{K},:) \mathcal{H}^{(t)}(:,\mathcal{K})]
-$$
+```
 
 Finally, we define the delay matrix $\mathcal{P} \in \mathbb{R}^{L \times \mathcal{N}}$
-$$
+```math
 \mathcal{P}^{(t)}=
 \begin{bmatrix}
 p^{(t)}_{1,1} &  p^{(t)}_{1,2}&  \cdots&  p^{(t)}_{1,\mathcal{N}}\\
@@ -51,22 +59,22 @@ p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,\mathcal{N}}\\
  \vdots&  \vdots&  \ddots&  \vdots\\
  p^{(t)}_{L,1}&  p^{(t)}_{L,2}&  \cdots& p^{(t)}_{L,\mathcal{N}}
 \end{bmatrix}
-$$
+```
 where $p^{(t)}_{i,j}$ is the propagation delay and scheduling delay from DU $\mathcal{D}_i$ to RU $\mathcal{R}_j$.
  
 We represent our state with the vector $s^{(t)}$:
-$$
+```math
 s^{(t)}=
 [
 P^{(t)},
 \mathcal{V}^{(t)}
 ]
-$$
+```
 ### 2. Action space
 The action space here is discrete-- we only want the agent to be able to reassign RUs to DUs and either wake up RUs/DUs or put them to sleep.
 
 We have the assignment matrix $\mathfrak{A} \in \mathbb{R}^{\mathcal{N} \times L}$ which represents assignments from RUs to DUs.
-$$
+```math
 \mathfrak{A}=
 
 \begin{bmatrix}
@@ -75,45 +83,45 @@ a_{2,1} &  a_{2,2}&  \cdots&  a_{2,L}\\
  \vdots& \vdots &  \ddots&  \vdots\\
 a_{\mathcal{N},1} & a_{\mathcal{N},2} & \cdots  & a_{\mathcal{N},L}
 \end{bmatrix}
-$$
+```
 where 
-$$
+```math
 a_{i,j}=\begin{cases}
 1 & \text{RU $i$ is assigned to DU $j$}\\
 0 & \text{otherwise}
 \end{cases}
-$$
+```
 
 Define a vector in $\mathcal{B} \in \mathbb{R}^{\mathcal{N}}$, which represents the sleep status of a given RU:
 
-$$
+```math
 \mathcal{B}=[b_1,b_2,\cdots,b_{\mathcal{N}}]
-$$
+```
 
 where
-$$
+```math
 b_i=\begin{cases}
 1 & \text{RU } r_i \text{ is active}\\
 0 & \text{RU } r_i \text{ is asleep}
 \end{cases}
-$$
+```
 Define a vector $\mathcal{F} \in \mathbb{R}^{L}$, which represents the sleep status of a given DU:
-$$
+```math
 \mathcal{F}=[f_1,f_2,\cdots,f_L]
-$$
+```
 
 where
-$$
+```math
 f_i=\begin{cases}
 1 & \text{DU } d_i \text{ is active}\\
 0 & \text{DU } d_i \text{ is asleep}
 \end{cases}
-$$
+```
 now we can represent our action space $\mathcal{A}$ as a vector:
 
-$$
+```math
 \mathcal{A}=[\mathfrak{A},\mathcal{B},\mathcal{F}|
-$$
+```
 
 ### 3. Reward function
 
@@ -124,25 +132,25 @@ For the reward function, we want to penalize:
 - Switching off DUs when there are RUs assigned to it
 
 Define $\mathfrak{R}$ to be our reward function:
-$$
+```math
 \mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RC switch}} + \mathfrak{R}_{\text{DU switch}}
-$$
+```
 where
-$$
+```math
 \mathfrak{R}_{\text{assignment}} = 5 - 5 | \delta_{\text{violated}} |
-$$
-$$
+```
+```math
 \mathfrak{R}_{\text{RC switch}} = \begin{cases}
 30 & \text{RSS} \geq -65 \\
 -25 & \text{otherwise}
 \end{cases}
-$$
-$$
+```
+```math
 \mathfrak{R}_{\text{DU switch}} = \begin{cases}
 15 & \text{The DU does not serve any RUs} \\
 -50 & \text{otherwise}
 \end{cases}
-$$
+```
 $| \delta_{\text{violated}} |$ is the number of delay budgets that were violated.
 - For example, if assigning an RU to a DU increased propagation delay to $x$, and $x$ violated the delay budget for URLLC traffic (2ms) and for eMBB (4ms), but not V2X (5ms), then $|\delta_{\text{violated}}|=2$.
 ## Testbed
