@@ -6,7 +6,6 @@ We will be using a DQN to handle this problem, specifically it is a Markov Decis
 | Variables                    |                                                              |
 | ---------------------------- | ------------------------------------------------------------ |
 | Number of radio units        | $\mathcal{N}$                                                |
-| Number of radio cards        | $\mathcal{M} = 2\mathcal{N}$                                 |
 | Number of user equipments    | $\mathcal{K}$                                                |
 | Number of distributed units  | $L$                                                          |
 | Number of traffic types      | $\mathbf{K}$                                                 |
@@ -18,17 +17,17 @@ We will be using a DQN to handle this problem, specifically it is a Markov Decis
 
 The $\mathcal{K}$ RUs are connected to $L$ DUs through a mesh topology, so these RUs can choose particular DUs to perform their higher-level physical layer functions.
 
-At time $t$, define the channel quality matrix $\mathcal{H}^{(t)} \in \mathbb{R}^{\mathcal{M} \times \mathcal{K}}$:
+At time $t$, define the channel quality matrix $\mathcal{H}^{(t)} \in \mathbb{R}^{\mathcal{N} \times \mathcal{K}}$:
 
 ```math
 \mathcal{H}^{(t)}=\begin{bmatrix}
 h^{(t)}_{1,1} &  h^{(t)}_{1,2} &  \cdots &  h^{(t)}_{1,K}\\
 h^{(t)}_{2,1} &  h^{(t)}_{2,2} &  \cdots &  h^{(t)}_{2,K}\\
 \vdots  &  \vdots &  \ddots &  \vdots\\
-h^{(t)}_{\mathcal{M},1} &  h^{(t)}_{\mathcal{M},2} & \cdots & h^{(t)}_{\mathcal{M},K}
+h^{(t)}_{\mathcal{N},1} &  h^{(t)}_{\mathcal{N},2} & \cdots & h^{(t)}_{\mathcal{N},K}
 \end{bmatrix}
 ```
-where $h^{(t)}_{i,j}$ is the RSS from radio card $r_i$ to UE $u_j$ at time $t$.
+where $h^{(t)}_{i,j}$ is the RSS from radio unit $r_i$ to UE $u_j$ at time $t$.
 
 At time $t$, define the geolocation matrix $G^{(t)} \in \mathbb{R}^{\mathcal{K} \times 2}$:
 
@@ -133,7 +132,7 @@ For the reward function, we want to penalize:
 
 Define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RC switch}} + \mathfrak{R}_{\text{DU switch}}
+\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RC switch}} + \mathfrak{R}_{\text{DU switch}}-|\mathcal{R}_\text{activated}|
 ```
 where
 ```math
@@ -151,10 +150,13 @@ where
 -50 & \text{otherwise}
 \end{cases}
 ```
+```math
+\mathcal{R}_\text{activated}=\text{the set of active RUs}
+```
 $| \delta_{\text{violated}} |$ is the number of delay budgets that were violated.
 - For example, if assigning an RU to a DU increased propagation delay to $x$, and $x$ violated the delay budget for URLLC traffic (2ms) and for eMBB (4ms), but not V2X (5ms), then $|\delta_{\text{violated}}|=2$.
 ## Testbed
-We will be using ns-3 to simulate a 5G O-RAN cellular network with:
+We will be using a custom testbed environment built in Python to train and test the model, using these parameters:
 - $n=6$ RUs evenly spaced at 100m
 - $m=3$ DUs
 - $k=12$ UEs moving in a random walk
