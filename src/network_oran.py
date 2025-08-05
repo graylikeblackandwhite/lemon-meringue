@@ -12,7 +12,8 @@ c = 299792458 # speed of light
 P_0 = 30.0 # in dBm
 E_S_DU = 2 # megajoules, how much energy the DU consumes by staying active
 E_S_RU = 1 # megajoules, how much energy the RU consumes by staying active
-RU_CELL_RADIUS = 250 # meters
+RU_CELL_RADIUS = 100 # meters
+GRAPHICAL_SCALING_FACTOR = 4
 
 # RENDERING INFO
 UE_IMAGE = "images/ue.gif"
@@ -192,10 +193,6 @@ class networkSimulation:
             newUE = UE(createRandomPoint(self.simulationSideLength/2))
             self.UEs[id] = newUE
 
-        print(self.RUs)
-        print(self.DUs)
-        print(self.UEs)
-
         for _ in range(0,simulationLength):
             UEConnectionTurtle.clear()
             RUDUConnectionTurtle.clear()
@@ -219,13 +216,13 @@ class networkSimulation:
                 closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
                 for unit in self.RUs.values():
                     print(ue.getPosition().dist(unit.getPosition()))
-                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS:
+                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS*GRAPHICAL_SCALING_FACTOR:
                         tentativeRU = ue.getPosition().dist(unit.getPosition())
                         if tentativeRU < closestActiveRUDist and unit.active == True:
                             closestActiveRU = unit
                             closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
                 
-                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS:
+                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS*GRAPHICAL_SCALING_FACTOR:
                     closestActiveRU = None
                 else:
                     ue.attachToRU(closestActiveRU)
