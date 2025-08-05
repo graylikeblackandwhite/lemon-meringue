@@ -1,4 +1,6 @@
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs, and assign resource blocks to user equipments (UEs)
+
+**Topology:** We have a mesh topology between the RUs and DUs, i.e., any RU can have any DU perform its higher PHY functions. There are many RUs connected to one DU. One RU cannot be connected to more than one DU.
 ## Model
 A DQN is used to solve this problem, specifically it is a Markov Decision Process (MDP), i.e., the action taken will depend only on the present state, not past states. A DQN requires three structures:
 ### 1. State Representation

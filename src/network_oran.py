@@ -12,6 +12,7 @@ c = 299792458 # speed of light
 P_0 = 30.0 # in dBm
 E_S_DU = 2 # megajoules, how much energy the DU consumes by staying active
 E_S_RU = 1 # megajoules, how much energy the RU consumes by staying active
+RU_CELL_RADIUS = 250 # meters
 
 # RENDERING INFO
 UE_IMAGE = "images/ue.gif"
@@ -30,12 +31,14 @@ class Point:
 
     def dist(self,otherPoint)-> float: 
         # Returns Euclidean distance between this point and another point.
-        return sqrt((self.x**2-otherPoint.x**2) + (self.y**2-otherPoint.y**2))
+        return sqrt(pow(self.x-otherPoint.x,2) + pow(self.y-otherPoint.y,2))
 
 class O_RU:
     def __init__(self, p: Point)->None:
         self.p = p
         self.active = True
+        self.connectedUEs = set()
+        self.connectedDU = None
 
         self.turtle = Turtle()
         self.turtle.penup()
@@ -47,12 +50,30 @@ class O_RU:
     def getPosition(self)->Point:
         return self.p
     
+    def getConnectedUEs(self):
+        return self.connectedUEs
+    
+    def addUE(self,UE)->None:
+        self.connectedUEs.add(UE)
+
+    def removeUE(self,UE)->None:
+        self.connectedUEs.remove(UE)
+
+    def connectDU(self,DU)->None:
+        if self.connectedDU:
+            self.connectedDU.removeRU(self)
+            self.connectedDU = None
+
+        self.connectedDU = DU
+
+    def getDU(self):
+        return self.connectedDU
 
 
 class O_DU:
     def __init__(self, p: Point)->None:
         self.p = p
-        self.connectedRUs = []
+        self.connectedRUs = set()
         self.active = True
 
         self.turtle = Turtle()
@@ -62,9 +83,11 @@ class O_DU:
         self.turtle.shape(DU_IMAGE)
         self.turtle.setheading(90)
 
-    def addRU(self, RU: O_RU)->None:
-        # Don't use this function! A better function which removes the RU from its previous DU can be found in this file.
-        self.connectedRUs.append(RU)
+    def connectRU(self, RU: O_RU)->None:
+        self.connectedRUs.add(RU)
+
+    def removeRU(self, RU: O_RU)->None:
+        self.connectedRUs.remove(RU)
 
     def getPosition(self)->Point:
         return self.p
@@ -90,7 +113,12 @@ class UE:
         self.turtle.setposition(self.p.x,self.p.y)
     
     def attachToRU(self,RU)->None:
+        if self.RU:
+            self.RU.removeUE(self)
+            self.RU = None
+    
         self.RU = RU
+        RU.addUE(self)
 
 class networkSimulation:
     def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
@@ -115,22 +143,24 @@ class networkSimulation:
         # Set up rendering
         screen = Screen()
         screen.setup(width=1500,height=1500)
-
+        screen.title("DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
+        screen.tracer(0)
 
         screen.register_shape(UE_IMAGE)
         screen.register_shape(RU_IMAGE)
         screen.register_shape(DU_IMAGE)
 
-        turtleRUs = {}
-        turtleDUs = {}
-        turtleUEs = {}
+        UEConnectionTurtle = Turtle()
+        UEConnectionTurtle.speed(0)
+        UEConnectionTurtle.penup()
+        UEConnectionTurtle.pencolor("blue")
+
+        RUDUConnectionTurtle = Turtle()
+        RUDUConnectionTurtle.speed(0)
+        RUDUConnectionTurtle.penup()
+        RUDUConnectionTurtle.pencolor("green")
 
         totalEnergyConsumption = 0
-
-        for id in range(self.numRUs-1):
-            # Create n RUs, assign IDs to them.
-            newRU = O_RU(createRandomPoint(self.simulationSideLength/2))
-            self.RUs[id] = newRU
 
         for id in range(self.numDUs-1):
             # Create m DUs, assign IDs to them.
@@ -141,41 +171,71 @@ class networkSimulation:
             newDU = O_DU(Point(L*cos(D_THETA),L*sin(D_THETA)))
             self.DUs[id] = newDU
 
-            newTurtleDU = Turtle()
-            newTurtleDU.penup()
-            newTurtleDU.speed(0)
-            newTurtleDU.shape(DU_IMAGE)
-            newTurtleDU.setheading(90)
+        for id in range(self.numRUs-1):
+            # Create n RUs, assign IDs to them.
+            newRU = O_RU(createRandomPoint(self.simulationSideLength/2))
+            self.RUs[id] = newRU
+
+            closestActiveDU = self.DUs[0]
+            closestActiveDUDist = closestActiveDU.getPosition().dist(self.RUs[id].getPosition())
+            for unit in self.DUs.values():
+                tentativeDU = self.RUs[id].getPosition().dist(unit.getPosition())
+                if tentativeDU < closestActiveDUDist and unit.active == True:
+                    closestActiveDU = unit
+                    closestActiveDUDist = closestActiveDU.getPosition().dist(self.RUs[id].getPosition())
+            
+            self.RUs[id].connectDU(closestActiveDU)
+
 
         for id in range(self.numUEs-1):
             # Create k UEs, assign IDs to them.
             newUE = UE(createRandomPoint(self.simulationSideLength/2))
             self.UEs[id] = newUE
 
-            newTurtleUE = Turtle()
-            newTurtleUE.penup()
-            newTurtleUE.speed(0)
-            newTurtleUE.shape(UE_IMAGE)
-            newTurtleUE.setheading(90)
-
         print(self.RUs)
         print(self.DUs)
         print(self.UEs)
 
         for _ in range(0,simulationLength):
-            for id in range(self.numDUs-1):
-                if self.DUs[id].active:
-                    totalEnergyConsumption += E_S_DU*self.timeStepLength
+            UEConnectionTurtle.clear()
+            RUDUConnectionTurtle.clear()
+
+            for unit in self.RUs.values():
+                RUDUConnectionTurtle.penup()
+                if unit.getDU():
+                    RUDUConnectionTurtle.goto(unit.getDU().getPosition().x, unit.getDU().getPosition().y)
+                    RUDUConnectionTurtle.pendown()
+                    RUDUConnectionTurtle.goto(unit.getPosition().x,unit.getPosition().y)
+
+
             
-            for id in range(self.numRUs-1):
-                if self.RUs[id].active:
-                    totalEnergyConsumption += E_S_RU*self.timeStepLength
 
             # Random Walk for UEs
-            for id in range(self.numUEs-1):
-                self.UEs[id].walk(createRandomPoint(8))
+            for ue in self.UEs.values():
+                ue.walk(createRandomPoint(8))
+                # Heuristic: Connect UE to nearest RU
+                # TODO: Base the heuristic on RSS, not distance.
+                closestActiveRU = self.RUs[0]
+                closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
+                for unit in self.RUs.values():
+                    print(ue.getPosition().dist(unit.getPosition()))
+                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS:
+                        tentativeRU = ue.getPosition().dist(unit.getPosition())
+                        if tentativeRU < closestActiveRUDist and unit.active == True:
+                            closestActiveRU = unit
+                            closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
+                
+                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS:
+                    closestActiveRU = None
+                else:
+                    ue.attachToRU(closestActiveRU)
+                    UEConnectionTurtle.goto(ue.getPosition().x, ue.getPosition().y)
+                    UEConnectionTurtle.pendown()
+                    UEConnectionTurtle.goto(ue.RU.getPosition().x, ue.RU.getPosition().y)
+                    UEConnectionTurtle.penup()
 
-
+                print("#####")
+            screen.update()
             time.sleep(self.timeStepLength)
 
         print(totalEnergyConsumption)
