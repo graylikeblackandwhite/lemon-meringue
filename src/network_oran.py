@@ -1,3 +1,8 @@
+#   Simulation software implementation
+#   Written by Gray
+#   TODO: Clean up code
+#
+
 from numpy import * # pyright: ignore[reportWildcardImportFromLibrary]
 from turtle import * # pyright: ignore[reportWildcardImportFromLibrary]
 from enum import Enum
@@ -12,13 +17,17 @@ c = 299792458 # speed of light
 P_0 = 30.0 # in dBm
 E_S_DU = 2 # megajoules, how much energy the DU consumes by staying active
 E_S_RU = 1 # megajoules, how much energy the RU consumes by staying active
-RU_CELL_RADIUS = 100 # meters
+RU_CELL_RADIUS = 4 * 100 # turtle units x meters
 GRAPHICAL_SCALING_FACTOR = 0.85
+RU_SIGNAL_STRENGTH = 30 #dBm
+DU_DISTANCE_FROM_CENTER = 500
 
 # RENDERING INFO
 UE_IMAGE = "images/ue.gif"
 RU_IMAGE = "images/ru.gif"
+RU_OFF_IMAGE = "images/ru_off.gif"
 DU_IMAGE = "images/du.gif"
+DU_OFF_IMAGE = "images/du_off.gif"
 
 # CLASSES
 
@@ -40,6 +49,7 @@ class O_RU:
         self.active = True
         self.connectedUEs = set()
         self.connectedDU = None
+        self.signalPower = RU_SIGNAL_STRENGTH
 
         self.turtle = Turtle()
         self.turtle.penup()
@@ -54,7 +64,7 @@ class O_RU:
     def getConnectedUEs(self):
         return self.connectedUEs
     
-    def addUE(self,UE)->None:
+    def connectUE(self,UE)->None:
         self.connectedUEs.add(UE)
 
     def removeUE(self,UE)->None:
@@ -69,6 +79,14 @@ class O_RU:
 
     def getDU(self):
         return self.connectedDU
+    
+    def sleep(self):
+        self.turtle.shape(RU_OFF_IMAGE)
+        self.active = False
+
+    def wake(self):
+        self.turtle.shape(RU_IMAGE)
+        self.active = True
 
 
 class O_DU:
@@ -92,6 +110,17 @@ class O_DU:
 
     def getPosition(self)->Point:
         return self.p
+    
+    def sleep(self):
+        self.turtle.shape(DU_OFF_IMAGE)
+        self.active = False
+
+    def wake(self):
+        self.turtle.shape(DU_IMAGE)
+        self.active = True
+
+    def status(self):
+        return self.active
 
 class UE:
     def __init__(self, p: Point)->None:
@@ -119,7 +148,7 @@ class UE:
             self.RU = None
     
         self.RU = RU
-        RU.addUE(self)
+        RU.connectUE(self)
 
 class networkSimulation:
     def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
@@ -132,8 +161,28 @@ class networkSimulation:
         self.simulationSideLength = s # in meters
         self.timeStepLength = dt # amount of time one frame goes for
 
-    def assignRUtoDU(self,RU,DU)->None:
-        pass
+    def assignmentMatrix(self):
+        A = []
+        for ru in self.RUs.values():
+            a_i = []
+            for du in self.DUs.values():
+                if ru.getDU() == du:
+                    a_i.append(1)
+                else:
+                    a_i.append(0)
+            A.append(a_i)
+        return matrix(A)
+
+    def takeRandomAction(self):
+        A = self.assignmentMatrix()
+        B = vectorize(lambda i: int(self.RUs[i].active))
+        F = vectorize(lambda i: int(self.DUs[i].active))
+
+        print(A)
+        print(B)
+        print(F)
+
+        
 
     def run(self, simulationLength: int)->None:
         # Reset components in simulation
@@ -150,6 +199,8 @@ class networkSimulation:
         screen.register_shape(UE_IMAGE)
         screen.register_shape(RU_IMAGE)
         screen.register_shape(DU_IMAGE)
+        screen.register_shape(RU_OFF_IMAGE)
+        screen.register_shape(DU_OFF_IMAGE)
 
         UEConnectionTurtle = Turtle()
         UEConnectionTurtle.speed(0)
@@ -163,18 +214,23 @@ class networkSimulation:
         RUDUConnectionTurtle.pencolor("green")
         RUDUConnectionTurtle.hideturtle()
 
+        SimulationStatisticsTurtle = Turtle()
+        SimulationStatisticsTurtle.speed(0)
+        SimulationStatisticsTurtle.penup()
+        SimulationStatisticsTurtle.hideturtle()
+        
+
         totalEnergyConsumption = 0
 
-        for id in range(self.numDUs-1):
+        for id in range(self.numDUs):
             # Create m DUs, assign IDs to them.
             
             # Place the DUs automatically
             D_THETA = rad2deg((pi*id)/(2*self.numDUs))
-            L = rng.uniform(20, self.simulationSideLength*sqrt(2)/2)
-            newDU = O_DU(Point(L*cos(D_THETA),L*sin(D_THETA)))
+            newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*cos(D_THETA),DU_DISTANCE_FROM_CENTER*sin(D_THETA)))
             self.DUs[id] = newDU
 
-        for id in range(self.numRUs-1):
+        for id in range(self.numRUs):
             # Create n RUs, assign IDs to them.
             newRU = O_RU(createRandomPoint(self.simulationSideLength/2))
             self.RUs[id] = newRU
@@ -190,7 +246,7 @@ class networkSimulation:
             self.RUs[id].connectDU(closestActiveDU)
 
 
-        for id in range(self.numUEs-1):
+        for id in range(self.numUEs):
             # Create k UEs, assign IDs to them.
             newUE = UE(createRandomPoint(self.simulationSideLength/2))
             self.UEs[id] = newUE
@@ -198,6 +254,19 @@ class networkSimulation:
         for _ in range(0,simulationLength):
             UEConnectionTurtle.clear()
             RUDUConnectionTurtle.clear()
+            SimulationStatisticsTurtle.clear()
+
+            SimulationStatisticsTurtle.goto(-700, 700)
+            SimulationStatisticsTurtle.write(f"Step: {_}", align="left", font=("Arial", 16, "normal"))
+
+            SimulationStatisticsTurtle.goto(-700, 675)
+            SimulationStatisticsTurtle.write(f"O-RUs: {self.numRUs}", align="left", font=("Arial", 16, "normal"))
+
+            SimulationStatisticsTurtle.goto(-700, 650)
+            SimulationStatisticsTurtle.write(f"O-DUs: {self.numDUs}", align="left", font=("Arial", 16, "normal"))
+
+            SimulationStatisticsTurtle.goto(-700, 625)
+            SimulationStatisticsTurtle.write(f"UEs: {self.numUEs}", align="left", font=("Arial", 16, "normal"))
 
             for unit in self.RUs.values():
                 RUDUConnectionTurtle.penup()
@@ -206,25 +275,22 @@ class networkSimulation:
                     RUDUConnectionTurtle.pendown()
                     RUDUConnectionTurtle.goto(unit.getPosition().x/GRAPHICAL_SCALING_FACTOR,unit.getPosition().y/GRAPHICAL_SCALING_FACTOR)
 
-
-            
-
             # Random Walk for UEs
             for ue in self.UEs.values():
                 ue.walk(createRandomPoint(8))
                 # Heuristic: Connect UE to nearest RU
                 # TODO: Base the heuristic on RSS, not distance.
                 closestActiveRU = self.RUs[0]
-                closestActiveRUDist = fspl(closestActiveRU.getPosition().dist(ue.getPosition()), 3300)
+                closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
                 for unit in self.RUs.values():
-                    print(fspl(ue.getPosition().dist(unit.getPosition()),3300))
-                    if fspl(ue.getPosition().dist(unit.getPosition()),3300) > -23:
-                        tentativeRU = fspl(ue.getPosition().dist(unit.getPosition()),3300)
+                    print(ue.getPosition().dist(unit.getPosition()))
+                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS:
+                        tentativeRU = ue.getPosition().dist(unit.getPosition())
                         if tentativeRU < closestActiveRUDist and unit.active == True:
                             closestActiveRU = unit
-                            closestActiveRUDist = fspl(closestActiveRU.getPosition().dist(ue.getPosition()),3300)
+                            closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
                 
-                if fspl(ue.getPosition().dist(closestActiveRU.getPosition()),3300) <= -23:
+                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS:
                     closestActiveRU = None
                 else:
                     ue.attachToRU(closestActiveRU)
@@ -235,6 +301,7 @@ class networkSimulation:
 
                 print("#####")
             screen.update()
+            self.takeRandomAction()
             time.sleep(self.timeStepLength)
 
         print(totalEnergyConsumption)
@@ -253,4 +320,5 @@ def rss(d,f)->float:
 def createRandomPoint(s)->Point:
     # Creates a random point from -s to s
     return Point(rng.uniform(-1*s,s),rng.uniform(-1*s,s))
+
 
