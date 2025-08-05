@@ -13,7 +13,7 @@ P_0 = 30.0 # in dBm
 E_S_DU = 2 # megajoules, how much energy the DU consumes by staying active
 E_S_RU = 1 # megajoules, how much energy the RU consumes by staying active
 RU_CELL_RADIUS = 100 # meters
-GRAPHICAL_SCALING_FACTOR = 4
+GRAPHICAL_SCALING_FACTOR = 0.85
 
 # RENDERING INFO
 UE_IMAGE = "images/ue.gif"
@@ -44,7 +44,7 @@ class O_RU:
         self.turtle = Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x,p.y)
+        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(RU_IMAGE)
         self.turtle.setheading(90)
 
@@ -80,7 +80,7 @@ class O_DU:
         self.turtle = Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x,p.y)
+        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(DU_IMAGE)
         self.turtle.setheading(90)
 
@@ -102,7 +102,7 @@ class UE:
         self.turtle = Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x,p.y)
+        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(UE_IMAGE)
         self.turtle.setheading(90)
 
@@ -111,7 +111,7 @@ class UE:
     
     def walk(self, d: Point)->None:
         self.p += d
-        self.turtle.setposition(self.p.x,self.p.y)
+        self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
     
     def attachToRU(self,RU)->None:
         if self.RU:
@@ -155,11 +155,13 @@ class networkSimulation:
         UEConnectionTurtle.speed(0)
         UEConnectionTurtle.penup()
         UEConnectionTurtle.pencolor("blue")
+        UEConnectionTurtle.hideturtle()
 
         RUDUConnectionTurtle = Turtle()
         RUDUConnectionTurtle.speed(0)
         RUDUConnectionTurtle.penup()
         RUDUConnectionTurtle.pencolor("green")
+        RUDUConnectionTurtle.hideturtle()
 
         totalEnergyConsumption = 0
 
@@ -200,9 +202,9 @@ class networkSimulation:
             for unit in self.RUs.values():
                 RUDUConnectionTurtle.penup()
                 if unit.getDU():
-                    RUDUConnectionTurtle.goto(unit.getDU().getPosition().x, unit.getDU().getPosition().y)
+                    RUDUConnectionTurtle.goto(unit.getDU().getPosition().x/GRAPHICAL_SCALING_FACTOR, unit.getDU().getPosition().y/GRAPHICAL_SCALING_FACTOR)
                     RUDUConnectionTurtle.pendown()
-                    RUDUConnectionTurtle.goto(unit.getPosition().x,unit.getPosition().y)
+                    RUDUConnectionTurtle.goto(unit.getPosition().x/GRAPHICAL_SCALING_FACTOR,unit.getPosition().y/GRAPHICAL_SCALING_FACTOR)
 
 
             
@@ -213,22 +215,22 @@ class networkSimulation:
                 # Heuristic: Connect UE to nearest RU
                 # TODO: Base the heuristic on RSS, not distance.
                 closestActiveRU = self.RUs[0]
-                closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
+                closestActiveRUDist = fspl(closestActiveRU.getPosition().dist(ue.getPosition()), 3300)
                 for unit in self.RUs.values():
-                    print(ue.getPosition().dist(unit.getPosition()))
-                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS*GRAPHICAL_SCALING_FACTOR:
-                        tentativeRU = ue.getPosition().dist(unit.getPosition())
+                    print(fspl(ue.getPosition().dist(unit.getPosition()),3300))
+                    if fspl(ue.getPosition().dist(unit.getPosition()),3300) > -23:
+                        tentativeRU = fspl(ue.getPosition().dist(unit.getPosition()),3300)
                         if tentativeRU < closestActiveRUDist and unit.active == True:
                             closestActiveRU = unit
-                            closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
+                            closestActiveRUDist = fspl(closestActiveRU.getPosition().dist(ue.getPosition()),3300)
                 
-                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS*GRAPHICAL_SCALING_FACTOR:
+                if fspl(ue.getPosition().dist(closestActiveRU.getPosition()),3300) <= -23:
                     closestActiveRU = None
                 else:
                     ue.attachToRU(closestActiveRU)
-                    UEConnectionTurtle.goto(ue.getPosition().x, ue.getPosition().y)
+                    UEConnectionTurtle.goto(ue.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.getPosition().y/GRAPHICAL_SCALING_FACTOR)
                     UEConnectionTurtle.pendown()
-                    UEConnectionTurtle.goto(ue.RU.getPosition().x, ue.RU.getPosition().y)
+                    UEConnectionTurtle.goto(ue.RU.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.RU.getPosition().y/GRAPHICAL_SCALING_FACTOR)
                     UEConnectionTurtle.penup()
 
                 print("#####")
