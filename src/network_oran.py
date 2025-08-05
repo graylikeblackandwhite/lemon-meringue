@@ -137,7 +137,7 @@ class networkSimulation:
             
             # Place the DUs automatically
             D_THETA = rad2deg((pi*id)/(2*self.numDUs))
-            L = rng.uniform(0, self.simulationSideLength*sqrt(2)/2)
+            L = rng.uniform(20, self.simulationSideLength*sqrt(2)/2)
             newDU = O_DU(Point(L*cos(D_THETA),L*sin(D_THETA)))
             self.DUs[id] = newDU
 
