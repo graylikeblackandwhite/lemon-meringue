@@ -20,7 +20,7 @@ E_S_DU: float = 2 # megajoules, how much energy the DU consumes by staying activ
 E_S_RU: float = 1 # megajoules, how much energy the RU consumes by staying active
 RSRP_THRESHOLD_DBM: float = -85
 GRAPHICAL_SCALING_FACTOR: float = 0.85
-RU_SIGNAL_STRENGTH: float = 30 #dBm
+RU_SIGNAL_STRENGTH: float = 36.98 #dBm
 DU_DISTANCE_FROM_CENTER: float = 500
 RU_DISTANCE_FROM_DU: float = 250
 
@@ -165,8 +165,6 @@ class UE:
     
         self.RU = RU
         RU.connectUE(self)
-        
-    
 
     def getRU(self)->O_RU:
         return self.RU # type: ignore
@@ -280,8 +278,6 @@ class networkSimulation:
             # Random Walk for UEs
             for ue in self.UEs.values():
                 ue.walk(createRandomPoint(8))
-                # Heuristic: Connect UE to nearest RU
-                # TODO: Base the heuristic on RSS, not distance.
                 bestConnectedRU = ue.getRU() if ue.getRU() else self.RUs[0]
                 bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
                 
@@ -289,7 +285,7 @@ class networkSimulation:
                     for unit in self.RUs.values():
                         if unit.active:
                             tentativeRSRP = rsrp(unit,ue)
-                            print(tentativeRSRP)
+                            #print(tentativeRSRP)
                             if tentativeRSRP >= RSRP_THRESHOLD_DBM:
                                 bestConnectedRU = unit
                                 bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
