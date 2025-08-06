@@ -87,24 +87,13 @@ P^{(t)},
 ### 2. Action space
 The action space here is discrete-- we only want the agent to be able to reassign RUs to DUs and either wake up RUs/DUs or put them to sleep.
 
-We have the assignment matrix $\mathfrak{A} \in \mathbb{R}^{\mathcal{N} \times L}$ which represents assignments from RUs to DUs.
+We have the assignment pair $\mathfrak{A} \in \mathbb{R}^{2}$ which represents a reassignment of an RU to a DU,
 ```math
 \mathfrak{A}=
 
-\begin{bmatrix}
-a_{1,1} &  a_{1,2}&  \cdots&  a_{1,L}\\
-a_{2,1} &  a_{2,2}&  \cdots&  a_{2,L}\\
- \vdots& \vdots &  \ddots&  \vdots\\
-a_{\mathcal{N},1} & a_{\mathcal{N},2} & \cdots  & a_{\mathcal{N},L}
-\end{bmatrix}
+[r_i,d_j]
 ```
-where 
-```math
-a_{i,j}=\begin{cases}
-1 & \text{RU $i$ is assigned to DU $j$}\\
-0 & \text{otherwise}
-\end{cases}
-```
+which indicates a reassignment of RU $r_i$ to DU $d_j$.
 
 Define a vector in $\mathcal{B} \in \mathbb{R}^{\mathcal{N}}$, which represents the sleep status of a given RU:
 
@@ -182,9 +171,9 @@ We will be using a custom testbed environment built in Python (can be found in `
 
 ### Experiment
 #### Parameters
-- $n=6$ RUs evenly spaced at 100m
-- $m=3$ DUs
-- $k=12$ UEs moving in a random walk
+- $n=16$ RUs evenly spaced at 100m
+- $m=4$ DUs
+- $k=50$ UEs moving in a random walk
 - 1000m by 1000m simulation area
 
 #### Other Models

@@ -1,15 +1,15 @@
 #   Simulation software implementation
 #   Written by Gray
 #   TODO: Clean up code
-#
+#   In this sim, we're using FR2, 28GHz
 
 from numpy import * # pyright: ignore[reportWildcardImportFromLibrary]
 from turtle import * # pyright: ignore[reportWildcardImportFromLibrary]
 from enum import Enum
 import time
 
-
-rng = random.default_rng()
+seed = 42
+rng = random.default_rng(seed=seed)
 
 # CONSTANTS
 
@@ -17,10 +17,11 @@ c = 299792458 # speed of light
 P_0 = 30.0 # in dBm
 E_S_DU = 2 # megajoules, how much energy the DU consumes by staying active
 E_S_RU = 1 # megajoules, how much energy the RU consumes by staying active
-RU_CELL_RADIUS = 4 * 100 # turtle units x meters
+RU_CELL_RADIUS = 300 # turtle units x meters
 GRAPHICAL_SCALING_FACTOR = 0.85
 RU_SIGNAL_STRENGTH = 30 #dBm
 DU_DISTANCE_FROM_CENTER = 500
+RU_DISTANCE_FROM_DU = 250
 
 # RENDERING INFO
 UE_IMAGE = "images/ue.gif"
@@ -49,12 +50,20 @@ class O_RU:
         self.active = True
         self.connectedUEs = set()
         self.connectedDU = None
-        self.signalPower = RU_SIGNAL_STRENGTH
 
+        self.transmissionPower = RU_SIGNAL_STRENGTH
+        self.operatingFrequency = 3300 #mHz
+        self.numberOfTransmissionAntennas = 8
+        self.maximumTransmitPower = RU_SIGNAL_STRENGTH + 15
+        self.polarization = 1
+
+        self.initializeTurtle()
+
+    def initializeTurtle(self):
         self.turtle = Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
+        self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(RU_IMAGE)
         self.turtle.setheading(90)
 
@@ -95,10 +104,13 @@ class O_DU:
         self.connectedRUs = set()
         self.active = True
 
+        self.initializeTurtle()
+
+    def initializeTurtle(self):
         self.turtle = Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
+        self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(DU_IMAGE)
         self.turtle.setheading(90)
 
@@ -150,39 +162,67 @@ class UE:
         self.RU = RU
         RU.connectUE(self)
 
+    def getRU(self)->O_RU:
+        return self.RU # type: ignore
+
 class networkSimulation:
     def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
         self.numRUs = n
         self.RUs = {}
+
         self.numDUs = m
         self.DUs = {}
+
         self.numUEs = k
         self.UEs = {}
+
         self.simulationSideLength = s # in meters
         self.timeStepLength = dt # amount of time one frame goes for
 
-    def assignmentMatrix(self):
-        A = []
-        for ru in self.RUs.values():
-            a_i = []
-            for du in self.DUs.values():
-                if ru.getDU() == du:
-                    a_i.append(1)
-                else:
-                    a_i.append(0)
-            A.append(a_i)
-        return matrix(A)
+        self.screen = Screen()
+        self.screen.setup(width=1500,height=1500)
+        self.screen.title("DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
+        self.screen.tracer(0)
 
-    def takeRandomAction(self):
-        A = self.assignmentMatrix()
-        B = vectorize(lambda i: int(self.RUs[i].active))
-        F = vectorize(lambda i: int(self.DUs[i].active))
+        self.screen.register_shape(UE_IMAGE)
+        self.screen.register_shape(RU_IMAGE)
+        self.screen.register_shape(DU_IMAGE)
+        self.screen.register_shape(RU_OFF_IMAGE)
+        self.screen.register_shape(DU_OFF_IMAGE)
 
-        print(A)
-        print(B)
-        print(F)
+        self.UEConnectionTurtle = Turtle()
+        self.UEConnectionTurtle.speed(0)
+        self.UEConnectionTurtle.penup()
+        self.UEConnectionTurtle.pencolor("blue")
+        self.UEConnectionTurtle.hideturtle()
 
-        
+        self.RUDUConnectionTurtle = Turtle()
+        self.RUDUConnectionTurtle.speed(0)
+        self.RUDUConnectionTurtle.penup()
+        self.RUDUConnectionTurtle.pencolor("green")
+        self.RUDUConnectionTurtle.hideturtle()
+
+        self.SimulationStatisticsTurtle = Turtle()
+        self.SimulationStatisticsTurtle.speed(0)
+        self.SimulationStatisticsTurtle.penup()
+        self.SimulationStatisticsTurtle.hideturtle()
+
+    def updateStatisticsDisplay(self, _: int):
+        self.UEConnectionTurtle.clear()
+        self.RUDUConnectionTurtle.clear()
+        self.SimulationStatisticsTurtle.clear()
+
+        self.SimulationStatisticsTurtle.goto(-700, 700)
+        self.SimulationStatisticsTurtle.write(f"Step: {_}", align="left", font=("Arial", 16, "normal"))
+
+        self.SimulationStatisticsTurtle.goto(-700, 675)
+        self.SimulationStatisticsTurtle.write(f"O-RUs: {self.numRUs*self.numDUs}", align="left", font=("Arial", 16, "normal"))
+
+        self.SimulationStatisticsTurtle.goto(-700, 650)
+        self.SimulationStatisticsTurtle.write(f"O-DUs: {self.numDUs}", align="left", font=("Arial", 16, "normal"))
+
+        self.SimulationStatisticsTurtle.goto(-700, 625)
+        self.SimulationStatisticsTurtle.write(f"UEs: {self.numUEs}", align="left", font=("Arial", 16, "normal"))
 
     def run(self, simulationLength: int)->None:
         # Reset components in simulation
@@ -190,60 +230,25 @@ class networkSimulation:
         self.DUs = {}
         self.UEs = {}
 
-        # Set up rendering
-        screen = Screen()
-        screen.setup(width=1500,height=1500)
-        screen.title("DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
-        screen.tracer(0)
-
-        screen.register_shape(UE_IMAGE)
-        screen.register_shape(RU_IMAGE)
-        screen.register_shape(DU_IMAGE)
-        screen.register_shape(RU_OFF_IMAGE)
-        screen.register_shape(DU_OFF_IMAGE)
-
-        UEConnectionTurtle = Turtle()
-        UEConnectionTurtle.speed(0)
-        UEConnectionTurtle.penup()
-        UEConnectionTurtle.pencolor("blue")
-        UEConnectionTurtle.hideturtle()
-
-        RUDUConnectionTurtle = Turtle()
-        RUDUConnectionTurtle.speed(0)
-        RUDUConnectionTurtle.penup()
-        RUDUConnectionTurtle.pencolor("green")
-        RUDUConnectionTurtle.hideturtle()
-
-        SimulationStatisticsTurtle = Turtle()
-        SimulationStatisticsTurtle.speed(0)
-        SimulationStatisticsTurtle.penup()
-        SimulationStatisticsTurtle.hideturtle()
         
 
         totalEnergyConsumption = 0
 
-        for id in range(self.numDUs):
+        for du in range(self.numDUs):
             # Create m DUs, assign IDs to them.
             
             # Place the DUs automatically
-            D_THETA = rad2deg((pi*id)/(2*self.numDUs))
-            newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*cos(D_THETA),DU_DISTANCE_FROM_CENTER*sin(D_THETA)))
-            self.DUs[id] = newDU
-
-        for id in range(self.numRUs):
-            # Create n RUs, assign IDs to them.
-            newRU = O_RU(createRandomPoint(self.simulationSideLength/2))
-            self.RUs[id] = newRU
-
-            closestActiveDU = self.DUs[0]
-            closestActiveDUDist = closestActiveDU.getPosition().dist(self.RUs[id].getPosition())
-            for unit in self.DUs.values():
-                tentativeDU = self.RUs[id].getPosition().dist(unit.getPosition())
-                if tentativeDU < closestActiveDUDist and unit.active == True:
-                    closestActiveDU = unit
-                    closestActiveDUDist = closestActiveDU.getPosition().dist(self.RUs[id].getPosition())
+            D_THETA = rad2deg(2*pi*du/self.numDUs)
             
-            self.RUs[id].connectDU(closestActiveDU)
+            newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*cos(D_THETA),DU_DISTANCE_FROM_CENTER*sin(D_THETA)))
+            self.DUs[du] = newDU
+
+            for ru in range(self.numRUs):
+                R_THETA = rad2deg(2*pi*ru/self.numRUs)
+
+                newRU = O_RU(Point(RU_DISTANCE_FROM_DU*cos(R_THETA) + newDU.getPosition().x,RU_DISTANCE_FROM_DU*sin(R_THETA) + newDU.getPosition().y))
+                self.RUs[len(self.RUs)] = newRU
+                newRU.connectDU(newDU)
 
 
         for id in range(self.numUEs):
@@ -252,56 +257,43 @@ class networkSimulation:
             self.UEs[id] = newUE
 
         for _ in range(0,simulationLength):
-            UEConnectionTurtle.clear()
-            RUDUConnectionTurtle.clear()
-            SimulationStatisticsTurtle.clear()
-
-            SimulationStatisticsTurtle.goto(-700, 700)
-            SimulationStatisticsTurtle.write(f"Step: {_}", align="left", font=("Arial", 16, "normal"))
-
-            SimulationStatisticsTurtle.goto(-700, 675)
-            SimulationStatisticsTurtle.write(f"O-RUs: {self.numRUs}", align="left", font=("Arial", 16, "normal"))
-
-            SimulationStatisticsTurtle.goto(-700, 650)
-            SimulationStatisticsTurtle.write(f"O-DUs: {self.numDUs}", align="left", font=("Arial", 16, "normal"))
-
-            SimulationStatisticsTurtle.goto(-700, 625)
-            SimulationStatisticsTurtle.write(f"UEs: {self.numUEs}", align="left", font=("Arial", 16, "normal"))
+            self.updateStatisticsDisplay(_)
 
             for unit in self.RUs.values():
-                RUDUConnectionTurtle.penup()
+                self.RUDUConnectionTurtle.penup()
                 if unit.getDU():
-                    RUDUConnectionTurtle.goto(unit.getDU().getPosition().x/GRAPHICAL_SCALING_FACTOR, unit.getDU().getPosition().y/GRAPHICAL_SCALING_FACTOR)
-                    RUDUConnectionTurtle.pendown()
-                    RUDUConnectionTurtle.goto(unit.getPosition().x/GRAPHICAL_SCALING_FACTOR,unit.getPosition().y/GRAPHICAL_SCALING_FACTOR)
+                    self.RUDUConnectionTurtle.goto(unit.getDU().getPosition().x/GRAPHICAL_SCALING_FACTOR, unit.getDU().getPosition().y/GRAPHICAL_SCALING_FACTOR)
+                    self.RUDUConnectionTurtle.pendown()
+                    self.RUDUConnectionTurtle.goto(unit.getPosition().x/GRAPHICAL_SCALING_FACTOR,unit.getPosition().y/GRAPHICAL_SCALING_FACTOR)
 
             # Random Walk for UEs
             for ue in self.UEs.values():
                 ue.walk(createRandomPoint(8))
                 # Heuristic: Connect UE to nearest RU
                 # TODO: Base the heuristic on RSS, not distance.
-                closestActiveRU = self.RUs[0]
+                closestActiveRU = ue.getRU() if ue.getRU() else self.RUs[0]
                 closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
-                for unit in self.RUs.values():
-                    print(ue.getPosition().dist(unit.getPosition()))
-                    if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS:
-                        tentativeRU = ue.getPosition().dist(unit.getPosition())
-                        if tentativeRU < closestActiveRUDist and unit.active == True:
-                            closestActiveRU = unit
-                            closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
-                
-                if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS:
-                    closestActiveRU = None
-                else:
-                    ue.attachToRU(closestActiveRU)
-                    UEConnectionTurtle.goto(ue.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.getPosition().y/GRAPHICAL_SCALING_FACTOR)
-                    UEConnectionTurtle.pendown()
-                    UEConnectionTurtle.goto(ue.RU.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.RU.getPosition().y/GRAPHICAL_SCALING_FACTOR)
-                    UEConnectionTurtle.penup()
+                # print(closestActiveRUDist)
+                if closestActiveRUDist > RU_CELL_RADIUS:
+                    for unit in self.RUs.values():
+                        #print(ue.getPosition().dist(unit.getPosition()))
+                        if ue.getPosition().dist(unit.getPosition()) <= RU_CELL_RADIUS:
+                            tentativeRU = ue.getPosition().dist(unit.getPosition())
+                            if tentativeRU < closestActiveRUDist and unit.active == True:
+                                closestActiveRU = unit
+                                closestActiveRUDist = closestActiveRU.getPosition().dist(ue.getPosition())
+                    if ue.getPosition().dist(closestActiveRU.getPosition()) > RU_CELL_RADIUS:
+                        closestActiveRU = None
+                    else:
+                        ue.attachToRU(closestActiveRU)
+                self.UEConnectionTurtle.goto(ue.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.getPosition().y/GRAPHICAL_SCALING_FACTOR)
+                self.UEConnectionTurtle.pendown()
+                self.UEConnectionTurtle.goto(ue.RU.getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.RU.getPosition().y/GRAPHICAL_SCALING_FACTOR)
+                self.UEConnectionTurtle.penup()
 
-                print("#####")
-            screen.update()
-            self.takeRandomAction()
+                # print("#####")
+            self.screen.update()
+            # self.takeRandomAction()
             time.sleep(self.timeStepLength)
 
         print(totalEnergyConsumption)
@@ -320,5 +312,3 @@ def rss(d,f)->float:
 def createRandomPoint(s)->Point:
     # Creates a random point from -s to s
     return Point(rng.uniform(-1*s,s),rng.uniform(-1*s,s))
-
-
