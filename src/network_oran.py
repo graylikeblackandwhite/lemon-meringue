@@ -104,6 +104,18 @@ class O_RU:
     def wake(self)->None:
         self.turtle.shape(RU_IMAGE)
         self.active = True
+        
+    def status(self):
+        return self.active
+        
+    def getProcessingLoad(self)->float:
+        GOPS = 0
+        for ue in self.getConnectedUEs():
+            GOPS += 0.4*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + ue.getRU().modulationOrder*ue.getRU().codeRate*ue.getRU().MIMOLayers/3)/5
+        self.processingLoad = GOPS/1600
+        if self.processingLoad > 1:
+            self.processingLoad = 1
+        return self.processingLoad
 
 
 class O_DU:
@@ -151,18 +163,15 @@ class O_DU:
     def wake(self)->None:
         self.turtle.shape(DU_IMAGE)
         self.active = True
-        
-    def updateProcessingLoad(self)->float:
+    
+    def getProcessingLoad(self)->float:
         # This function generates GOPS according to the paper "Dynamic Placement of O-CU and O-DU Functionalities in Open-RAN Architecture" by Hojeij et al.
         GOPS = 0
         for ue in self.getConnectedUEs():
-            GOPS += 0.5*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + ue.getRU().modulationScheme*ue.getRU().codingRate*ue.getRU().MIMOLayers/3)/5
+            GOPS += 0.5*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + ue.getRU().modulationOrder*ue.getRU().codeRate*ue.getRU().MIMOLayers/3)/5
         self.processingLoad = GOPS/1600
         if self.processingLoad > 1:
             self.processingLoad = 1
-        return self.processingLoad
-    
-    def getProcessingLoad(self)->float:
         return self.processingLoad
 
     def status(self):
@@ -275,11 +284,18 @@ class networkSimulation:
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
         
-        E_idle = 90 #watts
-        E_max = 650 #watts
+        E_DU_idle = 90 #watts
+        E_DU_max = 650 #watts
         for unit in self.DUs.values():
             if unit.status():
-                self.totalEnergyConsumption += (unit.getProcessingLoad()*(E_max + E_idle) + E_idle)*self.timeStepLength*(1/3600)
+                self.totalEnergyConsumption += (unit.getProcessingLoad()*(E_DU_max + E_DU_idle) + E_DU_idle)*(1/3600)
+                
+        E_RU_idle = 80 #watts
+        E_RU_max = 120 #watts
+                
+        for unit in self.RUs.values():
+            if unit.status():
+                self.totalEnergyConsumption += (unit.getProcessingLoad()*(E_RU_max + E_RU_idle) + E_RU_idle)*(1/3600)
         
             
     def getTotalEnergyConsumption(self):
@@ -291,7 +307,7 @@ class networkSimulation:
         Y_POSITION = self.screen.window_height()//2-50
 
         self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION)
-        self.SimulationStatisticsTurtle.write(f"Step: {_}", align="left", font=("Arial", 16, "normal"))
+        self.SimulationStatisticsTurtle.write(f"Time: {_} second(s)", align="left", font=("Arial", 16, "normal"))
 
         self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 25)
         self.SimulationStatisticsTurtle.write(f"O-RUs: {self.numRUs*self.numDUs}", align="left", font=("Arial", 16, "normal"))
