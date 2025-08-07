@@ -24,6 +24,9 @@ RU_SIGNAL_STRENGTH: float = 36.98 #dBm
 DU_DISTANCE_FROM_CENTER: float = 500
 RU_DISTANCE_FROM_DU: float = 250
 
+# SETTINGS
+SHOW_EXPERIMENT_STATS = False
+
 # RENDERING INFO
 UE_IMAGE: str = "images/ue.gif"
 RU_IMAGE: str = "images/ru.gif"
@@ -257,17 +260,14 @@ class networkSimulation:
         return matrix(mathcalV)
     
     def generateDelayMatrix(self) -> matrix:
-        
-        return matrix([])
+        mathcalP = fromfunction(vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
+        return mathcalP
     
     def generateProcessingLoadVector(self) -> matrix:
         mathcalZ = [self.DUs[unit].updateProcessingLoad() for unit in self.DUs]
         return matrix(mathcalZ)
 
     def updateStatisticsDisplay(self, _: int):
-        self.UEConnectionTurtle.clear()
-        self.RUDUConnectionTurtle.clear()
-        self.SimulationStatisticsTurtle.clear()
 
         X_POSITION = -1*self.screen.window_width()//2+50
         Y_POSITION = self.screen.window_height()//2-50
@@ -314,7 +314,7 @@ class networkSimulation:
         for du in range(self.numDUs):
             # Create m DUs, assign IDs to them
             # Place the DUs automatically
-            D_THETA = rad2deg(2*pi*du/self.numDUs)
+            D_THETA = rad2deg(pi*du/self.numDUs)
             newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*cos(D_THETA),DU_DISTANCE_FROM_CENTER*sin(D_THETA)))
             self.DUs[du] = newDU
             for ru in range(self.numRUs):
@@ -336,7 +336,15 @@ class networkSimulation:
         # Main loop
         for _ in range(0,simulationLength):
             time.sleep(self.timeStepLength)
-            self.updateStatisticsDisplay(_)
+            self.UEConnectionTurtle.clear()
+            self.RUDUConnectionTurtle.clear()
+            self.SimulationStatisticsTurtle.clear()
+            
+            print(self.generateDelayMatrix())
+            
+            if SHOW_EXPERIMENT_STATS:
+                self.updateStatisticsDisplay(_)
+                
             self.updateComponentConnectionDisplay()
             
             
@@ -359,7 +367,6 @@ class networkSimulation:
                     ue.detachFromRU()
                 else:
                     ue.attachToRU(bestConnectedRU)
-            print(self.generateProcessingLoadVector())
             self.screen.update()
 
 # FUNCTIONS

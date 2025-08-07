@@ -68,7 +68,7 @@ p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,\mathcal{N}}\\
 where 
 
 ```math
-p^{(t)}_{i,j}=\text{propagation delay} + \text{scheduling delay}
+p^{(t)}_{i,j}=\text{propagation delay}_\text{DL} + \text{scheduling delay}_\text{DL}
 ```
 from DU $\mathcal{D}_i$ to RU $\mathcal{R}_j$.
 
