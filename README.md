@@ -18,7 +18,7 @@ Q-learning requires three structures:
 | **Sets**                     |                                                              |
 | Set of UEs                   | $\mathcal{U}=u_1, u_2, \dots, u_{\mathcal{K}}$               |
 | Set of DUs                   | $\mathcal{D} = d_1,d_2,\dots,d_{L}$                          |
-| Set of RUs                   | $\mathcal{R}=r_1,r_2,\dots,r_{\mathcal{K}}$                  |
+| Set of RUs                   | $\mathcal{R}=r_1,r_2,\dots,r_{\mathcal{N}}$                  |
 | Set of delay budgets (in ms) | $\mathfrak{D} = \delta_1,\delta_2,\dots,\delta_{\mathbf{K}}$ |
 
 The $\mathcal{K}$ RUs are connected to $L$ DUs through a mesh topology, so these RUs can choose particular DUs to perform their higher-level physical layer functions.

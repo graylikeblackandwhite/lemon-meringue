@@ -56,8 +56,8 @@ class O_RU:
         self.transmissionPower: float = RU_SIGNAL_STRENGTH
         self.operatingFrequency: float = 3.7 #GHz, N77 Freq Band
         self.numberOfTransmissionAntennas: int = 8
-        self.maximumTransmitPower: float = RU_SIGNAL_STRENGTH + 15
-        self.polarization: int = 1
+        
+        #self.fieldOFDM: matrix = matrix(fromfunction(lambda i, j: ), ())
 
         self.initializeTurtle()
 
@@ -85,6 +85,7 @@ class O_RU:
         if self.connectedDU:
             self.connectedDU.removeRU(self)
 
+        DU.connectRU(self)
         self.connectedDU = DU
 
     def getDU(self)->'O_DU':
@@ -104,6 +105,8 @@ class O_DU:
         self.p = p
         self.connectedRUs: set = set()
         self.active = True
+        
+        self.processingLoad = 0 #percent
 
         self.initializeTurtle()
 
@@ -120,6 +123,17 @@ class O_DU:
 
     def removeRU(self, RU: O_RU)->None:
         self.connectedRUs.remove(RU)
+        
+    def getConnectedRUs(self)->set:
+        return self.connectedRUs
+    
+    def getConnectedUEs(self)->list:
+        T = []
+        for unit in self.getConnectedRUs():
+            
+            for ue in unit.getConnectedUEs():
+                T.append(ue)
+        return T
 
     def getPosition(self)->Point:
         return self.p
@@ -131,6 +145,21 @@ class O_DU:
     def wake(self)->None:
         self.turtle.shape(DU_IMAGE)
         self.active = True
+        
+    def updateProcessingLoad(self)->float:
+        M = 6
+        C = 0.75
+        L = 3
+        GOPS = 0
+        for ue in self.getConnectedUEs():
+            GOPS += 0.5*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + M*C*L/3)/5
+        self.processingLoad = GOPS/1600
+        if self.processingLoad > 1:
+            self.processingLoad = 1
+        return self.processingLoad
+    
+    def getProcessingLoad(self)->float:
+        return self.processingLoad
 
     def status(self):
         return self.active
@@ -185,7 +214,7 @@ class networkSimulation:
 
         self.screen = Screen()
         self.screen.setup(width=1500,height=1500)
-        self.screen.title("DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
+        self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
         self.screen.tracer(0)
 
         self.screen.register_shape(UE_IMAGE)
@@ -210,23 +239,58 @@ class networkSimulation:
         self.SimulationStatisticsTurtle.speed(0)
         self.SimulationStatisticsTurtle.penup()
         self.SimulationStatisticsTurtle.hideturtle()
+        
+    def generateChannelQualityMatrix(self) -> matrix:
+        mathcalH = fromfunction(vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
+        return mathcalH
+    
+    def generateGeoLocationMatrix(self) -> matrix:
+        G = fromfunction(vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
+        return G
+    
+    def generateConnectionQualityVector(self) -> matrix:
+        mathcalH = self.generateChannelQualityMatrix()
+        G = self.generateGeoLocationMatrix()
+        mathcalV = []
+        for i in range(self.numUEs):
+            mathcalV.append(outer(G[i,:],mathcalH[:,i]))
+        return matrix(mathcalV)
+    
+    def generateDelayMatrix(self) -> matrix:
+        
+        return matrix([])
+    
+    def generateProcessingLoadVector(self) -> matrix:
+        mathcalZ = [self.DUs[unit].updateProcessingLoad() for unit in self.DUs]
+        return matrix(mathcalZ)
 
     def updateStatisticsDisplay(self, _: int):
         self.UEConnectionTurtle.clear()
         self.RUDUConnectionTurtle.clear()
         self.SimulationStatisticsTurtle.clear()
 
-        self.SimulationStatisticsTurtle.goto(-700, 700)
+        X_POSITION = -1*self.screen.window_width()//2+50
+        Y_POSITION = self.screen.window_height()//2-50
+
+        self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION)
         self.SimulationStatisticsTurtle.write(f"Step: {_}", align="left", font=("Arial", 16, "normal"))
 
-        self.SimulationStatisticsTurtle.goto(-700, 675)
+        self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 25)
         self.SimulationStatisticsTurtle.write(f"O-RUs: {self.numRUs*self.numDUs}", align="left", font=("Arial", 16, "normal"))
 
-        self.SimulationStatisticsTurtle.goto(-700, 650)
+        self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 50)
         self.SimulationStatisticsTurtle.write(f"O-DUs: {self.numDUs}", align="left", font=("Arial", 16, "normal"))
 
-        self.SimulationStatisticsTurtle.goto(-700, 625)
+        self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 75)
         self.SimulationStatisticsTurtle.write(f"UEs: {self.numUEs}", align="left", font=("Arial", 16, "normal"))
+        
+        self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 100)
+        self.SimulationStatisticsTurtle.write(f"Channel Quality Matrix", align="left", font=("Arial", 16, "normal"))
+        # Here we are showing the channel quality matrix \mathcal{H} (more in README.md)
+        mathcalH = self.generateChannelQualityMatrix()
+        for row in range(self.numRUs*self.numDUs):
+            self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - (125 + 25*row))
+            self.SimulationStatisticsTurtle.write(f"{' '.join(str(round(x,2)) for x in mathcalH[row])}", align="left", font=("Arial", 16, "normal"))
 
     def updateComponentConnectionDisplay(self):
         for unit in self.RUs.values():
@@ -275,6 +339,7 @@ class networkSimulation:
             self.updateStatisticsDisplay(_)
             self.updateComponentConnectionDisplay()
             
+            
             # Random Walk for UEs
             for ue in self.UEs.values():
                 ue.walk(createRandomPoint(8))
@@ -294,7 +359,7 @@ class networkSimulation:
                     ue.detachFromRU()
                 else:
                     ue.attachToRU(bestConnectedRU)
-                            
+            print(self.generateProcessingLoadVector())
             self.screen.update()
 
 # FUNCTIONS
@@ -313,10 +378,10 @@ def calculatePathLoss(ru: O_RU, ue: UE)->float:
     return pl1 if d_2d > 10 and d_2d < d_bp else pl2
 
 def rsrp(ru: O_RU, ue: UE)->float:
-    # Returns Received Signal Strength given a distance in meters and a frequency in Gigahertz.
-    
     return ru.transmissionPower - calculatePathLoss(ru, ue)
 
+def rssi(ru: O_RU, ue: UE)->float:
+    return rsrp(ru, ue) + log10(12*275)
+
 def createRandomPoint(s)->Point:
-    # Creates a random point from -s to s
     return Point(rng.uniform(-1*s,s),rng.uniform(-1*s,s))
