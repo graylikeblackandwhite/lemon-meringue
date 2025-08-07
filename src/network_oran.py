@@ -25,7 +25,7 @@ DU_DISTANCE_FROM_CENTER: float = 500
 RU_DISTANCE_FROM_DU: float = 250
 
 # SETTINGS
-SHOW_EXPERIMENT_STATS = False
+SHOW_EXPERIMENT_STATS = True
 
 # RENDERING INFO
 UE_IMAGE: str = "images/ue.gif"
@@ -54,11 +54,14 @@ class O_RU:
         self.active = True
         self.connectedUEs: set = set()
         self.connectedDU: O_DU | None = None
-        self.height = 20 #meters
+        self.height = 10 #meters
 
         self.transmissionPower: float = RU_SIGNAL_STRENGTH
         self.operatingFrequency: float = 3.7 #GHz, N77 Freq Band
         self.numberOfTransmissionAntennas: int = 8
+        self.codeRate = 0.753
+        self.modulationOrder = 6
+        self.MIMOLayers = 4
         
         #self.fieldOFDM: matrix = matrix(fromfunction(lambda i, j: ), ())
 
@@ -150,12 +153,10 @@ class O_DU:
         self.active = True
         
     def updateProcessingLoad(self)->float:
-        M = 6
-        C = 0.75
-        L = 3
+        # This function generates GOPS according to the paper "Dynamic Placement of O-CU and O-DU Functionalities in Open-RAN Architecture" by Hojeij et al.
         GOPS = 0
         for ue in self.getConnectedUEs():
-            GOPS += 0.5*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + M*C*L/3)/5
+            GOPS += 0.5*(3*ue.getRU().numberOfTransmissionAntennas + ue.getRU().numberOfTransmissionAntennas**2 + ue.getRU().modulationScheme*ue.getRU().codingRate*ue.getRU().MIMOLayers/3)/5
         self.processingLoad = GOPS/1600
         if self.processingLoad > 1:
             self.processingLoad = 1
@@ -214,6 +215,7 @@ class networkSimulation:
 
         self.simulationSideLength = s # in meters
         self.timeStepLength = dt # amount of time one frame goes for
+        self.totalEnergyConsumption = 0 # in watts
 
         self.screen = Screen()
         self.screen.setup(width=1500,height=1500)
@@ -266,6 +268,22 @@ class networkSimulation:
     def generateProcessingLoadVector(self) -> matrix:
         mathcalZ = [self.DUs[unit].updateProcessingLoad() for unit in self.DUs]
         return matrix(mathcalZ)
+    
+    def generateStateVector(self) -> matrix:
+        return matrix([self.generateDelayMatrix(), self.generateConnectionQualityVector(), self.generateProcessingLoadVector()])
+    
+    def updateTotalEnergyConsumption(self) -> None:
+        # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
+        
+        E_idle = 90 #watts
+        E_max = 650 #watts
+        for unit in self.DUs.values():
+            if unit.status():
+                self.totalEnergyConsumption += (unit.getProcessingLoad()*(E_max + E_idle) + E_idle)*self.timeStepLength*(1/3600)
+        
+            
+    def getTotalEnergyConsumption(self):
+        return self.totalEnergyConsumption
 
     def updateStatisticsDisplay(self, _: int):
 
@@ -285,12 +303,15 @@ class networkSimulation:
         self.SimulationStatisticsTurtle.write(f"UEs: {self.numUEs}", align="left", font=("Arial", 16, "normal"))
         
         self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 100)
-        self.SimulationStatisticsTurtle.write(f"Channel Quality Matrix", align="left", font=("Arial", 16, "normal"))
+        self.SimulationStatisticsTurtle.write(f"Energy Consumption: {round(self.getTotalEnergyConsumption()/1e+3,4)} kWh", align="left", font=("Arial", 16, "normal"))
+        
+        #self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - 125)
+        #self.SimulationStatisticsTurtle.write(f"Channel Quality Matrix", align="left", font=("Arial", 16, "normal"))
         # Here we are showing the channel quality matrix \mathcal{H} (more in README.md)
-        mathcalH = self.generateChannelQualityMatrix()
-        for row in range(self.numRUs*self.numDUs):
-            self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - (125 + 25*row))
-            self.SimulationStatisticsTurtle.write(f"{' '.join(str(round(x,2)) for x in mathcalH[row])}", align="left", font=("Arial", 16, "normal"))
+        #mathcalH = self.generateChannelQualityMatrix()
+        #for row in range(self.numRUs*self.numDUs):
+        #    self.SimulationStatisticsTurtle.goto(X_POSITION, Y_POSITION - (150 + 25*row))
+        #    self.SimulationStatisticsTurtle.write(f"{' '.join(str(round(x,2)) for x in mathcalH[row])}", align="left", font=("Arial", 16, "normal"))
 
     def updateComponentConnectionDisplay(self):
         for unit in self.RUs.values():
@@ -331,7 +352,7 @@ class networkSimulation:
     def run(self, simulationLength: int)->None:
         self.initializeComponents()
         
-        totalEnergyConsumption = 0
+        
 
         # Main loop
         for _ in range(0,simulationLength):
@@ -339,9 +360,7 @@ class networkSimulation:
             self.UEConnectionTurtle.clear()
             self.RUDUConnectionTurtle.clear()
             self.SimulationStatisticsTurtle.clear()
-            
-            print(self.generateDelayMatrix())
-            
+                        
             if SHOW_EXPERIMENT_STATS:
                 self.updateStatisticsDisplay(_)
                 
@@ -354,25 +373,27 @@ class networkSimulation:
                 bestConnectedRU = ue.getRU() if ue.getRU() else self.RUs[0]
                 bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
                 
-                if bestConnectedRURSRP < RSRP_THRESHOLD_DBM:
-                    for unit in self.RUs.values():
-                        if unit.active:
-                            tentativeRSRP = rsrp(unit,ue)
-                            #print(tentativeRSRP)
-                            if tentativeRSRP >= RSRP_THRESHOLD_DBM:
-                                bestConnectedRU = unit
-                                bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
+                for unit in self.RUs.values():
+                    if unit.active:
+                        tentativeRSRP = rsrp(unit,ue)
+                        #print(tentativeRSRP)
+                        if tentativeRSRP >= RSRP_THRESHOLD_DBM:
+                            bestConnectedRU = unit
+                            bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
                                 
                 if bestConnectedRURSRP < RSRP_THRESHOLD_DBM:
                     ue.detachFromRU()
                 else:
                     ue.attachToRU(bestConnectedRU)
+            self.updateTotalEnergyConsumption()
             self.screen.update()
 
 # FUNCTIONS
 
 def calculatePathLoss(ru: O_RU, ue: UE)->float:
-    hprime_bs = ru.height - 1
+    #UMi path loss based on https://www.etsi.org/deliver/etsi_tr/138900_138999/138901/18.00.00_60/tr_138901v180000p.pdf
+    
+    hprime_bs = ru.height - 1.5
     
     d_2d = ru.getPosition().dist(ue.getPosition())
     d_3d = sqrt(pow((ru.getPosition().x-ue.getPosition().x),2) + pow((ru.getPosition().y-ue.getPosition().y),2) + pow((ru.height),2))
@@ -385,6 +406,7 @@ def calculatePathLoss(ru: O_RU, ue: UE)->float:
     return pl1 if d_2d > 10 and d_2d < d_bp else pl2
 
 def rsrp(ru: O_RU, ue: UE)->float:
+    # Calculation based on "Realistic Signal Strength Simulation for ORAN Testing Environments" by Nour Bahtite
     return ru.transmissionPower - calculatePathLoss(ru, ue)
 
 def rssi(ru: O_RU, ue: UE)->float:
