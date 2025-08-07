@@ -6,8 +6,10 @@
 from numpy import * # pyright: ignore[reportWildcardImportFromLibrary]
 from turtle import * # pyright: ignore[reportWildcardImportFromLibrary]
 from enum import Enum
+from datetime import datetime
 import time
 import typing
+import pandas as pd
 
 seed: float = 427
 rng: random.Generator = random.default_rng(seed=seed)
@@ -364,6 +366,16 @@ class networkSimulation:
             # Create k UEs, assign IDs to them.
             newUE = UE(createRandomPoint(self.simulationSideLength/2))
             self.UEs[id] = newUE
+            
+    def writeResults(self)->None:
+        data = {
+            'Seed': [seed],
+            'Total Energy Consumption (kWh)': round(self.getTotalEnergyConsumption()/1e+3,4),
+            'RU Geolocations': [[(float(ru.getPosition().x),float(ru.getPosition().y)) for ru in self.RUs.values()]],
+            'DU Geolocations': [[(float(du.getPosition().x),float(du.getPosition().y)) for du in self.DUs.values()]]
+            }
+        df = pd.DataFrame(data)
+        df.to_csv(f'../data/output{datetime.now()}')
 
     def run(self, simulationLength: int)->None:
         self.initializeComponents()
@@ -403,6 +415,8 @@ class networkSimulation:
                     ue.attachToRU(bestConnectedRU)
             self.updateTotalEnergyConsumption()
             self.screen.update()
+        self.writeResults()
+
 
 # FUNCTIONS
 
