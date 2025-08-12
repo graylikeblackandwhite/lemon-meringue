@@ -1,25 +1,21 @@
 #   Simulation software implementation
 #   Written by Gray
 #   TODO: Clean up code
-#   In this sim, we're using FR2, 28GHz
 
-from numpy import * # pyright: ignore[reportWildcardImportFromLibrary]
-from turtle import * # pyright: ignore[reportWildcardImportFromLibrary]
 from enum import Enum
 from datetime import datetime
+import numpy as np
 import time
 import typing
 import pandas as pd
+import turtle
 
 seed: float = 427
-rng: random.Generator = random.default_rng(seed=seed)
+rng: np.random.Generator = np.random.default_rng(seed=seed)
 
 # CONSTANTS
 
 c: float = 299792458 # speed of light
-P_0: float = 30.0 # in dBm
-E_S_DU: float = 2 # megajoules, how much energy the DU consumes by staying active
-E_S_RU: float = 1 # megajoules, how much energy the RU consumes by staying active
 RSRP_THRESHOLD_DBM: float = -85
 GRAPHICAL_SCALING_FACTOR: float = 0.85
 RU_SIGNAL_STRENGTH: float = 36.98 #dBm
@@ -27,7 +23,7 @@ DU_DISTANCE_FROM_CENTER: float = 500
 RU_DISTANCE_FROM_DU: float = 250
 
 # SETTINGS
-SHOW_EXPERIMENT_STATS = True
+SHOW_EXPERIMENT_STATS: bool = True
 
 # RENDERING INFO
 UE_IMAGE: str = "images/ue.gif"
@@ -48,7 +44,7 @@ class Point:
 
     def dist(self,otherPoint)-> float: 
         # Returns Euclidean distance between this point and another point.
-        return sqrt(pow(self.x-otherPoint.x,2) + pow(self.y-otherPoint.y,2))
+        return np.sqrt(pow(self.x-otherPoint.x,2) + pow(self.y-otherPoint.y,2))
 
 class O_RU:
     def __init__(self, p: Point)->None:
@@ -70,7 +66,7 @@ class O_RU:
         self.initializeTurtle()
 
     def initializeTurtle(self)->None:
-        self.turtle = Turtle()
+        self.turtle = turtle.Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
         self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
@@ -107,7 +103,7 @@ class O_RU:
         self.turtle.shape(RU_IMAGE)
         self.active = True
         
-    def status(self):
+    def status(self)->bool:
         return self.active
         
     def getProcessingLoad(self)->float:
@@ -131,7 +127,7 @@ class O_DU:
         self.initializeTurtle()
 
     def initializeTurtle(self):
-        self.turtle = Turtle()
+        self.turtle = turtle.Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
         self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
@@ -176,7 +172,7 @@ class O_DU:
             self.processingLoad = 1
         return self.processingLoad
 
-    def status(self):
+    def status(self)->bool:
         return self.active
 
 class UE:
@@ -185,7 +181,7 @@ class UE:
         self.RU = None
         self.freq: int = 3300 # MHz
 
-        self.turtle = Turtle()
+        self.turtle = turtle.Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
         self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
@@ -215,6 +211,8 @@ class UE:
 
 class networkSimulation:
     def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
+        self.mainLoopStep = -1
+        
         self.numRUs = n
         self.RUs = {}
 
@@ -228,7 +226,7 @@ class networkSimulation:
         self.timeStepLength = dt # amount of time one frame goes for
         self.totalEnergyConsumption = 0 # in watts
 
-        self.screen = Screen()
+        self.screen = turtle.Screen()
         self.screen.setup(width=1500,height=1500)
         self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
         self.screen.tracer(0)
@@ -239,49 +237,67 @@ class networkSimulation:
         self.screen.register_shape(RU_OFF_IMAGE)
         self.screen.register_shape(DU_OFF_IMAGE)
 
-        self.UEConnectionTurtle = Turtle()
+        self.UEConnectionTurtle = turtle.Turtle()
         self.UEConnectionTurtle.speed(0)
         self.UEConnectionTurtle.penup()
         self.UEConnectionTurtle.pencolor("blue")
         self.UEConnectionTurtle.hideturtle()
 
-        self.RUDUConnectionTurtle = Turtle()
+        self.RUDUConnectionTurtle = turtle.Turtle()
         self.RUDUConnectionTurtle.speed(0)
         self.RUDUConnectionTurtle.penup()
         self.RUDUConnectionTurtle.pencolor("green")
         self.RUDUConnectionTurtle.hideturtle()
 
-        self.SimulationStatisticsTurtle = Turtle()
+        self.SimulationStatisticsTurtle = turtle.Turtle()
         self.SimulationStatisticsTurtle.speed(0)
         self.SimulationStatisticsTurtle.penup()
         self.SimulationStatisticsTurtle.hideturtle()
         
-    def generateChannelQualityMatrix(self) -> matrix:
-        mathcalH = fromfunction(vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
+    def generateChannelQualityMatrix(self) -> np.matrix:
+        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
         return mathcalH
     
-    def generateGeoLocationMatrix(self) -> matrix:
-        G = fromfunction(vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
+    def generateGeoLocationMatrix(self) -> np.matrix:
+        G = np.fromfunction(np.vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
         return G
     
-    def generateConnectionQualityVector(self) -> matrix:
+    def generateConnectionQualityVector(self) -> np.matrix:
         mathcalH = self.generateChannelQualityMatrix()
         G = self.generateGeoLocationMatrix()
         mathcalV = []
         for i in range(self.numUEs):
-            mathcalV.append(outer(G[i,:],mathcalH[:,i]))
-        return matrix(mathcalV)
+            mathcalV.append(np.outer(G[i,:],mathcalH[:,i]))
+        return np.matrix(mathcalV)
     
-    def generateDelayMatrix(self) -> matrix:
-        mathcalP = fromfunction(vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
+    def generateDelayMatrix(self) -> np.matrix:
+        mathcalP = np.fromfunction(np.vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
         return mathcalP
     
-    def generateProcessingLoadVector(self) -> matrix:
+    def generateProcessingLoadVector(self) -> np.matrix:
         mathcalZ = [self.DUs[unit].updateProcessingLoad() for unit in self.DUs]
-        return matrix(mathcalZ)
+        return np.matrix(mathcalZ)
     
-    def generateStateVector(self) -> matrix:
-        return matrix([self.generateDelayMatrix(), self.generateConnectionQualityVector(), self.generateProcessingLoadVector()])
+    def generateStateVector(self) -> np.matrix:
+        return np.matrix([self.generateDelayMatrix(), self.generateConnectionQualityVector(), self.generateProcessingLoadVector()])
+    
+    def calculateRUPowerReward(self, state, action) -> float:
+        ue: UE
+        for ue in self.UEs.values():
+            if ue.getRU():
+                if rssi(ue.getRU(),ue) < -65:
+                    return -30
+        return 60
+    
+    def calculateDUPowerReward(self, state, action) -> float:
+        return 1.0
+    
+    def calculateReward(self, state, action) -> float:
+        R_RU_power = self.calculateRUPowerReward(state, action)
+        R_DU_power = self.calculateDUPowerReward(state, action)
+        
+        return R_RU_power
+        
     
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
@@ -353,12 +369,12 @@ class networkSimulation:
         for du in range(self.numDUs):
             # Create m DUs, assign IDs to them
             # Place the DUs automatically
-            D_THETA = rad2deg(pi*du/self.numDUs)
-            newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*cos(D_THETA),DU_DISTANCE_FROM_CENTER*sin(D_THETA)))
+            D_THETA = np.rad2deg(np.pi*du/self.numDUs)
+            newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*np.cos(D_THETA),DU_DISTANCE_FROM_CENTER*np.sin(D_THETA)))
             self.DUs[du] = newDU
             for ru in range(self.numRUs):
-                R_THETA = rad2deg(2*pi*ru/self.numRUs)
-                newRU = O_RU(Point(RU_DISTANCE_FROM_DU*cos(R_THETA) + newDU.getPosition().x,RU_DISTANCE_FROM_DU*sin(R_THETA) + newDU.getPosition().y))
+                R_THETA = np.rad2deg(2*np.pi*ru/self.numRUs)
+                newRU = O_RU(Point(RU_DISTANCE_FROM_DU*np.cos(R_THETA) + newDU.getPosition().x,RU_DISTANCE_FROM_DU*np.sin(R_THETA) + newDU.getPosition().y))
                 self.RUs[len(self.RUs)] = newRU
                 newRU.connectDU(newDU)
 
@@ -370,6 +386,7 @@ class networkSimulation:
     def writeResults(self)->None:
         data = {
             'Seed': [seed],
+            'Simulation Length (seconds)': [self.simulationLength],
             'Total Energy Consumption (kWh)': round(self.getTotalEnergyConsumption()/1e+3,4),
             'RU Geolocations': [[(float(ru.getPosition().x),float(ru.getPosition().y)) for ru in self.RUs.values()]],
             'DU Geolocations': [[(float(du.getPosition().x),float(du.getPosition().y)) for du in self.DUs.values()]]
@@ -379,11 +396,11 @@ class networkSimulation:
 
     def run(self, simulationLength: int)->None:
         self.initializeComponents()
+        self.simulationLength = simulationLength
         
-        
-
         # Main loop
         for _ in range(0,simulationLength):
+            self.mainLoopStep = _
             time.sleep(self.timeStepLength)
             self.UEConnectionTurtle.clear()
             self.RUDUConnectionTurtle.clear()
@@ -393,7 +410,6 @@ class networkSimulation:
                 self.updateStatisticsDisplay(_)
                 
             self.updateComponentConnectionDisplay()
-            
             
             # Random Walk for UEs
             for ue in self.UEs.values():
@@ -426,12 +442,12 @@ def calculatePathLoss(ru: O_RU, ue: UE)->float:
     hprime_bs = ru.height - 1.5
     
     d_2d = ru.getPosition().dist(ue.getPosition())
-    d_3d = sqrt(pow((ru.getPosition().x-ue.getPosition().x),2) + pow((ru.getPosition().y-ue.getPosition().y),2) + pow((ru.height),2))
+    d_3d = np.sqrt(pow((ru.getPosition().x-ue.getPosition().x),2) + pow((ru.getPosition().y-ue.getPosition().y),2) + pow((ru.height),2))
     d_bp = 4*hprime_bs*1.5*ru.operatingFrequency/c
     
     
-    pl1 = 32.4 + 21*log10(d_3d)+20*log10(ru.operatingFrequency)
-    pl2 = 32.4 + 40*log10(d_3d)+20*log10(ru.operatingFrequency)-9.5*log10(d_bp**2+(ru.height-1.5)**2)
+    pl1 = 32.4 + 21*np.log10(d_3d)+20*np.log10(ru.operatingFrequency)
+    pl2 = 32.4 + 40*np.log10(d_3d)+20*np.log10(ru.operatingFrequency)-9.5*np.log10(d_bp**2+(ru.height-1.5)**2)
     
     return pl1 if d_2d > 10 and d_2d < d_bp else pl2
 
@@ -440,7 +456,7 @@ def rsrp(ru: O_RU, ue: UE)->float:
     return ru.transmissionPower - calculatePathLoss(ru, ue)
 
 def rssi(ru: O_RU, ue: UE)->float:
-    return rsrp(ru, ue) + log10(12*275)
+    return rsrp(ru, ue) + np.log10(12*275)
 
 def createRandomPoint(s)->Point:
     return Point(rng.uniform(-1*s,s),rng.uniform(-1*s,s))

@@ -1,4 +1,6 @@
-# Stochastic Deep Q-Learning Model for Joint Optimization of 5G Cellular Network Scheduling Delay and Energy Efficiency
+# Stochastic Deep Q-Learning Model for Joint Optimization of 5G Cellular Network Delay and Energy Efficiency
+
+**Abstract:** 
 
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs.
 
@@ -55,14 +57,14 @@ At time $t$, define the connection quality vector $\mathcal{V}^{(t)}$:
 G^{(t)}(\mathcal{K},:) \mathcal{H}^{(t)}(:,\mathcal{K})]
 ```
 
-We define the delay matrix $\mathcal{P} \in \mathbb{R}^{L \times \mathcal{N}}$
+We define the delay matrix $\mathcal{P} \in \mathbb{R}^{\mathcal{N} \times L}$
 ```math
 \mathcal{P}^{(t)}=
 \begin{bmatrix}
-p^{(t)}_{1,1} &  p^{(t)}_{1,2}&  \cdots&  p^{(t)}_{1,\mathcal{N}}\\
-p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,\mathcal{N}}\\
+p^{(t)}_{1,1} &  p^{(t)}_{1,2}&  \cdots&  p^{(t)}_{1,L}\\
+p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,L}\\
  \vdots&  \vdots&  \ddots&  \vdots\\
- p^{(t)}_{L,1}&  p^{(t)}_{L,2}&  \cdots& p^{(t)}_{L,\mathcal{N}}
+ p^{(t)}_{\mathcal{N},1}&  p^{(t)}_{\mathcal{N},2}&  \cdots& p^{(t)}_{\mathcal{N}, L}
 \end{bmatrix}
 ```
 where 
@@ -70,9 +72,9 @@ where
 ```math
 p^{(t)}_{i,j}=\text{propagation delay}_\text{DL} + \text{scheduling delay}_\text{DL}
 ```
-from DU $\mathcal{D}_i$ to RU $\mathcal{R}_j$.
+from RU $\mathcal{R}_i$ to DU $\mathcal{D}_j$.
 
-Finally, at time $t$, define a processing load vector $\mathcal{Z}^{(t)} \in \mathbb{R}^L$, where $\mathcal{Z}_i$ is the overall CPU utilization of du $d_i$.
+At time $t$, define a processing load vector $\mathcal{Z}^{(t)} \in \mathbb{R}^L$, where $\mathcal{Z}_i$ is the overall CPU utilization of du $d_i$.
 
 
 We represent our state with the vector $s^{(t)}$:
