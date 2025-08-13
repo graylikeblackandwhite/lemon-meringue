@@ -125,8 +125,10 @@ f_i=\begin{cases}
 now we can represent our action space $\mathcal{A}$ as a vector:
 
 ```math
-\mathcal{A}=[\mathfrak{A},\mathcal{B},\mathcal{F}|
+\mathcal{A}=[\mathfrak{A},\mathcal{B},\mathcal{F}, \empty|
 ```
+
+where $\empty$ represents no action taken.
 
 ### 3. Reward function
 Elaborate: Will we make a decision once every time interval or at every time step?

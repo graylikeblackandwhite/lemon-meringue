@@ -1,9 +1,16 @@
 #   Simulation software implementation
 #   Written by Gray
 #   TODO: Clean up code
+#   TODO: Implement custom movement paths for devices
+#   We can start from an environment with static UEs that don't change association.
+#   We can implement dynamic traffic demands into the model to make it more realistic.
+#   Measure energy consumption using default solution (no change), we can do this side-by-side in the simulation. One side can have the model activated, the other can have no model active, we can compare the energy consumption between both scenarios.
+#   Even if there's no srsRAN, *some* conferences do accept these kinds of ad hoc simulations. If the math is solid we can submit to a conference.
+#   If the solution doesn't show promising results, we can find a different scope for the paper.
 
 from enum import Enum
 from datetime import datetime
+from collections import deque
 import numpy as np
 import time
 import typing
@@ -31,6 +38,13 @@ RU_IMAGE: str = "images/ru.gif"
 RU_OFF_IMAGE: str = "images/ru_off.gif"
 DU_IMAGE: str = "images/du.gif"
 DU_OFF_IMAGE: str = "images/du_off.gif"
+
+# ENUMS
+class NetworkSimulationActionType(Enum):
+    SWITCH = 0
+    RU_SLEEP = 1
+    DU_SLEEP = 2
+    
 
 # CLASSES
 
@@ -98,6 +112,10 @@ class O_RU:
     def sleep(self)->None:
         self.turtle.shape(RU_OFF_IMAGE)
         self.active = False
+        
+        ue: UE    
+        for ue in self.getConnectedUEs():
+            ue.detachFromRU()
 
     def wake(self)->None:
         self.turtle.shape(RU_IMAGE)
@@ -158,6 +176,7 @@ class O_DU:
         self.turtle.shape(DU_OFF_IMAGE)
         self.active = False
 
+
     def wake(self)->None:
         self.turtle.shape(DU_IMAGE)
         self.active = True
@@ -212,6 +231,7 @@ class UE:
 class networkSimulation:
     def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
         self.mainLoopStep = -1
+        self.actionBuffer = deque(maxlen=2000)
         
         self.numRUs = n
         self.RUs = {}
@@ -289,6 +309,9 @@ class networkSimulation:
                     return -30
         return 60
     
+    def calculateSleepReward(self) -> float:
+        return len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()])
+    
     def calculateDUPowerReward(self, state, action) -> float:
         return 1.0
     
@@ -296,7 +319,7 @@ class networkSimulation:
         R_RU_power = self.calculateRUPowerReward(state, action)
         R_DU_power = self.calculateDUPowerReward(state, action)
         
-        return R_RU_power
+        return R_RU_power + self.calculateSleepReward()
         
     
     def updateTotalEnergyConsumption(self) -> None:
@@ -315,9 +338,18 @@ class networkSimulation:
             if unit.status():
                 self.totalEnergyConsumption += (unit.getProcessingLoad()*(E_RU_max + E_RU_idle) + E_RU_idle)*(1/3600)
         
-            
     def getTotalEnergyConsumption(self):
         return self.totalEnergyConsumption
+
+    def do(self, action_type: NetworkSimulationActionType, **kwargs):
+        if action_type == NetworkSimulationActionType.RU_SLEEP:
+            pass
+        elif action_type == NetworkSimulationActionType.DU_SLEEP:
+            pass
+        elif action_type == NetworkSimulationActionType.SWITCH:
+            pass
+        else:
+            raise TypeError(f"NetworkSimulationActionType {action_type} doesn't exist.")
 
     def updateStatisticsDisplay(self, _: int):
 
