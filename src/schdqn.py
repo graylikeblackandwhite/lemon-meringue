@@ -48,7 +48,7 @@ class StochDQNAgent:
         R = np.random.choice(self.replay_buffer, np.ceil(np.log(self.action_size)))
         C = np.random.sample(np.ceil(np.log(self.action_size)))
         
-    def chooseRandomAction(self, simulation: network_oran.networkSimulation):
+    def chooseRandomAction(self, simulation: network_oran.NetworkSimulation):
         # We have SWITCH and SLEEP actions. From SLEEP, there are RU and DU. From those branches, a selection will put an RU or DU to sleep.
         # SWITCH action has L x N pairs of RUs and DUs. Selecting one pair will assign RU i to DU j.
         rand = np.random.randint(0,3)
@@ -57,10 +57,10 @@ class StochDQNAgent:
             if np.random.randint(0,2) < 1:
                 # Randomly selecting an RU to put to switch status
                 RU_chosen: network_oran.O_RU = simulation.RUs[np.random.randint(0,simulation.numRUs*simulation.numDUs+1)]
-                RU_chosen.sleep() if RU_chosen.status() else RU_chosen.wake()
+                simulation.do(network_oran.NetworkSimulationActionType.RU_SLEEP, ru=RU_chosen)
             else:
                 DU_chosen: network_oran.O_DU = simulation.DUs[np.random.randint(0,simulation.numDUs+1)]
-                DU_chosen.sleep() if DU_chosen.status() else DU_chosen.wake()
+                simulation.do(network_oran.NetworkSimulationActionType.DU_SLEEP, du=DU_chosen)
         elif rand == 1:
             # Choosing from SWITCH branch
             RU_chosen: network_oran.O_RU = simulation.RUs[np.random.randint(0,simulation.numRUs*simulation.numDUs+1)]
@@ -68,13 +68,13 @@ class StochDQNAgent:
             while RU_chosen.getDU() == DU_chosen:
                 RU_chosen: network_oran.O_RU = simulation.RUs[np.random.randint(0,simulation.numRUs*simulation.numDUs+1)]
                 
-            RU_chosen.connectDU(DU_chosen)
+            simulation.do(network_oran.NetworkSimulationActionType.SWITCH, du=DU_chosen, ru=RU_chosen)
         elif rand == 2:
             # the NOTHING action. sometimes the agent doesn't have to do anything
             pass
             
         
-    def stochasticPolicy(self, epsilon_s, simulation: network_oran.networkSimulation):
+    def stochasticPolicy(self, epsilon_s, simulation: network_oran.NetworkSimulation):
         #TODO: make more precise
         if np.random.uniform(0,1) <= epsilon_s:
             self.chooseRandomAction(simulation)
@@ -84,7 +84,7 @@ class StochDQNAgent:
         
     def train(self, episodes):
         for _ in range(episodes):
-            NS = network_oran.networkSimulation(int(np.random.uniform(3,6)),int(np.random.uniform(3,6)),int(np.random.uniform(12,50)),1000,0.05)
+            NS = network_oran.NetworkSimulation(int(np.random.uniform(3,6)),int(np.random.uniform(3,6)),int(np.random.uniform(12,50)),1000,0.05)
             s = NS.generateStateVector()
             while NS.mainLoopStep < 1000:
                 chosen_action = self.stochasticPolicy(0.05, NS)
