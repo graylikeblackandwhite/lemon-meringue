@@ -11,10 +11,12 @@
 from enum import Enum
 from datetime import datetime
 from collections import deque
+from itertools import product
 import multiprocessing
 import numpy as np
 import time, turtle
 import pandas as pd
+import torch
 
 seed: float = 427
 rng: np.random.Generator = np.random.default_rng(seed=seed)
@@ -256,7 +258,7 @@ class NetworkSimulation:
         self.timeStepLength = dt # amount of time one frame goes for
         self.totalEnergyConsumption = 0 # in watts
 
-        self.screen = turtle.Screen()
+        self.screen: turtle._Screen = turtle.Screen()
         self.screen.setup(width=1500,height=1500)
         self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
         self.screen.tracer(0)
@@ -350,16 +352,6 @@ class NetworkSimulation:
     def getTotalEnergyConsumption(self):
         return self.totalEnergyConsumption
 
-    def do(self, action_type: NetworkSimulationActionType, **kwargs):
-        if action_type == NetworkSimulationActionType.RU_SLEEP:
-            self.actionBuffer.put(NetworkSimulationActionTuple(action_type, self.mainLoopStep, 0.01, ru=kwargs.get("ru")))
-        elif action_type == NetworkSimulationActionType.DU_SLEEP:
-            self.actionBuffer.put(NetworkSimulationActionTuple(action_type, self.mainLoopStep, 0.01, du=kwargs.get("du")))
-        elif action_type == NetworkSimulationActionType.SWITCH:
-            self.actionBuffer.put(NetworkSimulationActionTuple(action_type, self.mainLoopStep, 0.02, ru=kwargs.get("ru"), du=kwargs.get("du")))
-        else:
-            raise TypeError(f"NetworkSimulationActionType {action_type} doesn't exist.")
-
     def updateStatisticsDisplay(self, _: int):
 
         X_POSITION = -1*self.screen.window_width()//2+50
@@ -427,33 +419,14 @@ class NetworkSimulation:
         df = pd.DataFrame(data)
         df.to_csv(f'../data/output{datetime.now()}')
         
-    def processActionBuffer(self)->None:
-        while self.running:
-            if not self.actionBuffer.empty:
-                currentAction: NetworkSimulationActionTuple = self.actionBuffer.get()
-                action_type = currentAction.action_type
-                #time.sleep(currentAction.time_cost)
-                if action_type == NetworkSimulationActionType.RU_SLEEP:
-                    print("Ok")
-                    RU: O_RU = currentAction.arguments["ru"]
-                    RU.sleep() if RU.status() else RU.wake()
-                elif action_type == NetworkSimulationActionType.DU_SLEEP:
-                    DU: O_DU = currentAction.arguments["du"]
-                    DU.sleep() if DU.status() else DU.wake()
-                elif action_type == NetworkSimulationActionType.SWITCH:
-                    RU: O_RU = currentAction.arguments["ru"]
-                    DU: O_DU = currentAction.arguments["du"]
-                    RU.connectDU(DU)
-    
-    def startActionHandling(self)->None:
-        self.ActionHandler: multiprocessing.Process = multiprocessing.Process(target=self.processActionBuffer, daemon=True, name="NetworkSimulationActionBuffer")
-        #ActionHandler: Process = Process(target=self.processActionBuffer)
-        self.ActionHandler.start()
-        #self.ActionHandler.join()
-
+    def generateActionSpace(self)->torch.Tensor:
+        RUsleepSpace = torch.tensor([1 if unit.awake() else 0 for unit in self.RUs.values()])
+        DUsleepSpace = torch.tensor([1 if unit.awake() else 0 for unit in self.DUs.values()])
+        RUDUSwapSpace = torch.tensor([1 if ru.getDU() == du else 0 for ru, du in product(self.RUs.values(),self.DUs.values())])
+        return torch.cat((RUsleepSpace,DUsleepSpace,RUDUSwapSpace), 0)
+        
     def run(self, simulationLength: int)->None:
         self.initializeComponents()
-        self.startActionHandling()
         self.simulationLength = simulationLength
         self.running = True
         

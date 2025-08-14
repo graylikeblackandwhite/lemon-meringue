@@ -147,18 +147,18 @@ Define $\mathfrak{R}$ to be our reward function:
 ```
 where
 ```math
-\mathfrak{R}_{\text{assignment}} = 5 - 5 | \delta_{\text{violated}} |
+\mathfrak{R}_{\text{assignment}} = 1 -  \frac{| \delta_{\text{violated}}|}{|\delta|} 
 ```
 ```math
 \mathfrak{R}_{\text{RU power}} = \begin{cases}
-60 & \text{RSS} \geq -65 \\
--30 & \text{otherwise}
+1 & \text{RSS} \geq -65 \\
+-1 & \text{otherwise}
 \end{cases}
 ```
 ```math
 \mathfrak{R}_{\text{DU power}} = \begin{cases}
-45 & \text{The DU does not serve any RUs} \\
--50 & \text{otherwise}
+1 & \text{The DU does not serve any RUs} \\
+-1 & \text{otherwise}
 \end{cases}
 ```
 ```math
