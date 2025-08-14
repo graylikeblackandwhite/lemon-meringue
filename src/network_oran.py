@@ -48,6 +48,13 @@ class NetworkSimulationActionType(Enum):
 
 # CLASSES
 
+class NetworkSimulationActionTuple:
+    def __init__(self, action_type: NetworkSimulationActionType, **kwargs) -> None:
+        self.action_type: NetworkSimulationActionType = action_type
+        self.arguments: dict = {}
+        for key, value in enumerate(kwargs):
+            self.arguments[key] = value
+
 class Point:
     def __init__(self,x: float,y: float)->None:
         self.x = x
@@ -229,21 +236,11 @@ class UE:
 
     def getRU(self)->O_RU:
         return self.RU # type: ignore
-    
-class NetworkSimulationActionTuple:
-    def __init__(self, action_type: NetworkSimulationActionType, time_step: int, time_cost: float, **kwargs) -> None:
-        self.action_type: NetworkSimulationActionType = action_type
-        self.time_step: int = time_step
-        self.time_cost: float = time_cost
-        self.arguments: dict = {}
-        for key, value in enumerate(kwargs):
-            self.arguments[key] = value
 
 class NetworkSimulation:
-    def __init__(self, n: int, m: int, k: int, s: float, q, dt=0.1)->None:
+    def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
         self.mainLoopStep = -1
         self.running = False
-        self.actionBuffer = q
         
         self.numRUs = n
         self.RUs = {}
@@ -286,34 +283,32 @@ class NetworkSimulation:
         self.SimulationStatisticsTurtle.penup()
         self.SimulationStatisticsTurtle.hideturtle()
         
-    def generateChannelQualityMatrix(self) -> np.matrix:
+    def generateChannelQualityMatrix(self) -> torch.Tensor:
         mathcalH = np.fromfunction(np.vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
-        return mathcalH
+        return torch.tensor(mathcalH)
     
-    def generateGeoLocationMatrix(self) -> np.matrix:
+    def generateGeoLocationMatrix(self) -> torch.Tensor:
         G = np.fromfunction(np.vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
-        return G
+        return torch.tensor(G)
     
-    def generateConnectionQualityVector(self) -> np.matrix:
+    def generateConnectionQualityVector(self) -> torch.Tensor:
         mathcalH = self.generateChannelQualityMatrix()
         G = self.generateGeoLocationMatrix()
-        mathcalV = []
-        for i in range(self.numUEs):
-            mathcalV.append(np.outer(G[i,:],mathcalH[:,i]))
-        return np.matrix(mathcalV)
+        mathcalV = mathcalH*G
+        return torch.tensor(mathcalV)
     
-    def generateDelayMatrix(self) -> np.matrix:
+    def generateDelayMatrix(self) -> torch.Tensor:
         mathcalP = np.fromfunction(np.vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
-        return mathcalP
+        return torch.tensor(mathcalP)
     
-    def generateProcessingLoadVector(self) -> np.matrix:
-        mathcalZ = [self.DUs[unit].updateProcessingLoad() for unit in self.DUs]
-        return np.matrix(mathcalZ)
+    def generateProcessingLoadVector(self) -> torch.Tensor:
+        mathcalZ = [self.DUs[unit].getProcessingLoad() for unit in self.DUs]
+        return torch.tensor(mathcalZ)
     
-    def generateStateVector(self) -> np.matrix:
-        return np.matrix([self.generateDelayMatrix(), self.generateConnectionQualityVector(), self.generateProcessingLoadVector()])
+    def generateStateVector(self) -> torch.Tensor:
+        return torch.cat((torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())), 0)
     
-    def calculateRUPowerReward(self, state, action) -> float:
+    def calculateRUPowerReward(self) -> float:
         ue: UE
         for ue in self.UEs.values():
             if ue.getRU():
@@ -324,12 +319,12 @@ class NetworkSimulation:
     def calculateSleepReward(self) -> float:
         return len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()])
     
-    def calculateDUPowerReward(self, state, action) -> float:
+    def calculateDUPowerReward(self) -> float:
         return 1.0
     
-    def calculateReward(self, state, action) -> float:
-        R_RU_power = self.calculateRUPowerReward(state, action)
-        R_DU_power = self.calculateDUPowerReward(state, action)
+    def calculateReward(self) -> float:
+        R_RU_power = self.calculateRUPowerReward()
+        R_DU_power = self.calculateDUPowerReward()
         
         return R_RU_power + self.calculateSleepReward()
         
@@ -419,6 +414,26 @@ class NetworkSimulation:
         df = pd.DataFrame(data)
         df.to_csv(f'../data/output{datetime.now()}')
         
+    def updateUEs(self)->None:
+        for ue in self.UEs.values():
+            ue.walk(createRandomPoint(8))
+            bestConnectedRU = ue.getRU() if ue.getRU() else self.RUs[0]
+            bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
+                
+            unit: O_RU
+            for unit in self.RUs.values():
+                if unit.active:
+                    tentativeRSRP = rsrp(unit,ue)
+                    #print(tentativeRSRP)
+                    if tentativeRSRP >= RSRP_THRESHOLD_DBM:
+                        bestConnectedRU = unit
+                        bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
+                                
+            if bestConnectedRURSRP < RSRP_THRESHOLD_DBM:
+                ue.detachFromRU()
+            else:
+                ue.attachToRU(bestConnectedRU)
+        
     def generateActionSpace(self)->torch.Tensor:
         RUsleepSpace = torch.tensor([1 if unit.awake() else 0 for unit in self.RUs.values()])
         DUsleepSpace = torch.tensor([1 if unit.awake() else 0 for unit in self.DUs.values()])
@@ -443,24 +458,7 @@ class NetworkSimulation:
                 
             self.updateComponentConnectionDisplay()
             
-            # Random Walk for UEs
-            for ue in self.UEs.values():
-                ue.walk(createRandomPoint(8))
-                bestConnectedRU = ue.getRU() if ue.getRU() else self.RUs[0]
-                bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
-                
-                for unit in self.RUs.values():
-                    if unit.active:
-                        tentativeRSRP = rsrp(unit,ue)
-                        #print(tentativeRSRP)
-                        if tentativeRSRP >= RSRP_THRESHOLD_DBM:
-                            bestConnectedRU = unit
-                            bestConnectedRURSRP = rsrp(bestConnectedRU,ue)
-                                
-                if bestConnectedRURSRP < RSRP_THRESHOLD_DBM:
-                    ue.detachFromRU()
-                else:
-                    ue.attachToRU(bestConnectedRU)
+            self.updateUEs()
             self.updateTotalEnergyConsumption()
             self.screen.update()
         self.writeResults()

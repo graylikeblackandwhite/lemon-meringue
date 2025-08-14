@@ -143,7 +143,7 @@ For the reward function, we want to penalize:
 
 Define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-|\mathcal{R}_\text{activated}|-|\mathcal{D}_\text{activated}|
+\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|}
 ```
 where
 ```math
