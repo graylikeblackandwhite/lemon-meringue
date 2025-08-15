@@ -82,7 +82,8 @@ We represent our state with the vector $s^{(t)}$:
 s^{(t)}=
 [
 P^{(t)},
-\mathcal{V}^{(t)},
+\mathcal{H}^{(t)},
+G^{(t)},
 \mathcal{Z}^{(t)}
 ]
 ```
