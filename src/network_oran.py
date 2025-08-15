@@ -85,6 +85,9 @@ class O_RU:
         #self.fieldOFDM: matrix = matrix(fromfunction(lambda i, j: ), ())
 
         self.initializeTurtle()
+        
+    def __del__(self)->None:
+        del self.turtle
 
     def initializeTurtle(self)->None:
         self.turtle = turtle.Turtle()
@@ -309,24 +312,38 @@ class NetworkSimulation:
         return torch.flatten(torch.cat((torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())), 0))
     
     def calculateRUPowerReward(self) -> float:
+        r = 0
         ue: UE
         for ue in self.UEs.values():
             if ue.getRU():
                 if rssi(ue.getRU(),ue) < -65:
-                    return -30
-        return 60
+                    r += 1
+        return r/len(self.UEs.values())
     
     def calculateSleepReward(self) -> float:
-        return len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()])
+        return (len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()]))/(len(self.RUs.values()) + len(self.DUs.values()))
     
     def calculateDUPowerReward(self) -> float:
-        return 1.0
+        r = 0
+        du: O_DU
+        for du in self.DUs.values():
+            if not du.status() and len(du.getConnectedRUs()) > 0:
+                r += 1
+        return r/len(self.DUs.values())
+    
+    def calculateNetworkCoverageReward(self) -> float:
+        r = 0
+        ue: UE
+        for ue in self.UEs.values():
+            if ue.getRU():
+                r += 1
+        return r/len(self.UEs.values())
     
     def calculateReward(self) -> torch.Tensor:
         R_RU_power = self.calculateRUPowerReward()
         R_DU_power = self.calculateDUPowerReward()
         
-        return torch.tensor(R_RU_power + self.calculateSleepReward(), dtype=torch.float32)
+        return torch.tensor(R_RU_power + R_DU_power - self.calculateSleepReward() + self.calculateNetworkCoverageReward(), dtype=torch.float32)
         
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
@@ -402,6 +419,34 @@ class NetworkSimulation:
             # Create k UEs, assign IDs to them.
             newUE = UE(createRandomPoint(self.simulationSideLength/2))
             self.UEs[id] = newUE
+            
+        self.screen: turtle._Screen = turtle.Screen()
+        self.screen.setup(width=1500,height=1500)
+        self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
+        self.screen.tracer(0)
+
+        self.screen.register_shape(UE_IMAGE)
+        self.screen.register_shape(RU_IMAGE)
+        self.screen.register_shape(DU_IMAGE)
+        self.screen.register_shape(RU_OFF_IMAGE)
+        self.screen.register_shape(DU_OFF_IMAGE)
+
+        self.UEConnectionTurtle = turtle.Turtle()
+        self.UEConnectionTurtle.speed(0)
+        self.UEConnectionTurtle.penup()
+        self.UEConnectionTurtle.pencolor("blue")
+        self.UEConnectionTurtle.hideturtle()
+
+        self.RUDUConnectionTurtle = turtle.Turtle()
+        self.RUDUConnectionTurtle.speed(0)
+        self.RUDUConnectionTurtle.penup()
+        self.RUDUConnectionTurtle.pencolor("green")
+        self.RUDUConnectionTurtle.hideturtle()
+
+        self.SimulationStatisticsTurtle = turtle.Turtle()
+        self.SimulationStatisticsTurtle.speed(0)
+        self.SimulationStatisticsTurtle.penup()
+        self.SimulationStatisticsTurtle.hideturtle()
             
     def writeResults(self)->None:
         data = {

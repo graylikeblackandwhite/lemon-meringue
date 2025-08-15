@@ -107,20 +107,28 @@ class StochDQNAgent:
         N = simulation.numRUs*L
         
         if int_action in range(0,N-1):
+            print(f"Sleep {int_action-N}th RU")
             RU: network_oran.O_RU = simulation.RUs[int_action]
             RU.sleep() if RU.status() else RU.wake()
         elif int_action in range(N, N+L):
+            print(f"Sleep {int_action-N}th DU")
             DU: network_oran.O_DU = simulation.DUs[int_action-N]
             DU.sleep() if DU.status() else DU.wake()
         elif int_action in range(N+L+1, N+L+1+N*L):
-            print("Poop switch")
             
+            x = int_action-N-L
+            print(f"Make connection between {x%N}th RU, {x%L}th DU")
+            RU: network_oran.O_RU = simulation.RUs[x%N]
+            DU: network_oran.O_DU = simulation.DUs[x%L]
+            if not RU in DU.getConnectedRUs():
+                RU.connectDU(DU)
+        else:
+            print("Do nothing")
             
-        
     def train(self, episodes):
         returns = []
         for _ in range(episodes):
-            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(3,6,50,1000)
+            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(3,6,50,1000,0.0025)
             NS.running = True
             while NS.running:
                 NS.initializeComponents()

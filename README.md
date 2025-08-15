@@ -88,14 +88,16 @@ P^{(t)},
 ```
 ### 2. Action space
 The action space here is discrete-- we only want the agent to be able to reassign RUs to DUs and either wake up RUs/DUs or put them to sleep.
-
-We have the assignment pair $\mathfrak{A} \in \mathbb{R}^{2}$ which represents a reassignment of an RU to a DU,
 ```math
-\mathfrak{A}=
-
-[r_i,d_j]
+ \mathfrak{A}= 
+ \begin{bmatrix} 
+ a_{1,1} & a_{1,2}& \cdots& a_{1,L}\\ a_{2,1} & a_{2,2}& \cdots& a_{2,L}\\ \vdots& \vdots & \ddots& \vdots\\ a_{\mathcal{N},1} & a_{\mathcal{N},2} & \cdots & a_{\mathcal{N},L} 
+ \end{bmatrix}
 ```
-which indicates a reassignment of RU $r_i$ to DU $d_j$.
+ where 
+ ```math
+ a_{i,j}=\begin{cases} 1 & \text{RU i is assisted by DU j }\ 0 & \text{otherwise} \end{cases}
+ ```
 
 Define a vector in $\mathcal{B} \in \mathbb{R}^{\mathcal{N}}$, which represents the sleep status of a given RU:
 
@@ -143,7 +145,7 @@ For the reward function, we want to penalize:
 
 Define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|}
+\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|} - \frac{|\mathcal{U}_\text{coverage}|}{|\mathcal{U}|}
 ```
 where
 ```math
