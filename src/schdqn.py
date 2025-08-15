@@ -8,17 +8,12 @@ import torch
 import network_oran
 import time
 import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 from collections import deque
 from itertools import product
 from torch import nn
 from torch import optim
-
-class StateTransitionTuple:
-    def __init__(self, state, action, reward, next_state) -> None:
-        self.state = state
-        self.action = action
-        self.reward = reward
-        self.next_state = next_state
 
 class StochDQNNetwork(nn.Module):
     def __init__(self, input_size: int, output_size: int) -> None:
@@ -66,7 +61,7 @@ class ReplayBuffer:
 class StochDQNAgent:
     # Stochastic DQN Agent.
     # Flatten s(t), feed into network.
-    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=0.005, epsilon_min=0.05, use_cuda=False) -> None:
+    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=1e-5, epsilon_min=0.05, epsilon_max =1.0, use_cuda=False) -> None:
         self.device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
         print('device ', self.device)
         
@@ -80,6 +75,7 @@ class StochDQNAgent:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         
         self.log2_actions = round(np.log2(self.N+self.L+self.N*self.L))
+        self.epsilon_max = epsilon_max
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
@@ -146,12 +142,13 @@ class StochDQNAgent:
             
     def train(self, episodes):
         returns = []
+        losses = []
         for episode in range(episodes):
-            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(3,6,50,1000,0)
+            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N//self.L, self.L, self.K,1000,0)
             NS.running = True
             while NS.running:
                 NS.initializeComponents()
-                NS.simulationLength = 500
+                NS.simulationLength = 250
                 
                 NS.step(0)
                 state = NS.generateStateVector()
@@ -162,7 +159,6 @@ class StochDQNAgent:
                     action: torch.Tensor = self.stochPolicy(state)
                     self.interpretAction(action, NS)
                     
-                    time.sleep(NS.timeStepLength)
                     NS.step(step)
                     
                     next_state: torch.Tensor = NS.generateStateVector()
@@ -184,21 +180,22 @@ class StochDQNAgent:
                         
                         target_b = reward_b + self.gamma * next_qsa_b
                         
-                        self.loss = nn.functional.mse_loss(qsa_b, target_b)
-                    
+                        loss = nn.functional.mse_loss(qsa_b, target_b)
                         self.model.zero_grad()
-                        self.loss.backward()
+                        loss.backward()
                         self.optimizer.step()
-                    
+                        losses.append(loss.item())
+                        
                     NS.step(step)
-                    if step % 50 == 0:
+                    if step % 200 == 0:
                         self.target_model.load_state_dict(self.model.state_dict())
                     state = NS.generateStateVector()
                     ep_return += reward.item()
-                print(ep_return)
+                #print(ep_return)
                 NS.running = False
                 returns.append(ep_return)
-                self.epsilon = max(self.epsilon_min, self.epsilon - self.epsilon_decay)
+                
+                self.epsilon = self.epsilon_min + (self.epsilon_max - self.epsilon_min) * np.exp(-self.epsilon_decay * episode)
                 break
             for turtle in NS.screen.turtles():
                 del turtle
@@ -206,3 +203,4 @@ class StochDQNAgent:
         self.writeEpisodeResults(episodes,1000,returns)
         self.model.eval()
         torch.save(self.model.state_dict(), f"../models/stochdqn_{datetime.now()}.pth")
+        return returns

@@ -24,12 +24,15 @@ rng: np.random.Generator = np.random.default_rng(seed=seed)
 # CONSTANTS
 
 c: float = 299792458 # speed of light
-RSRP_THRESHOLD_DBM: float = -85
+RSRP_THRESHOLD_DBM: float = -90
+RSRP_REWARD_THRESHOLD_DBM: float = -80 #dBm
 GRAPHICAL_SCALING_FACTOR: float = 0.85
 RU_SIGNAL_STRENGTH: float = 36.98 #dBm
 DU_DISTANCE_FROM_CENTER: float = 500
 RU_DISTANCE_FROM_DU: float = 250
 
+RU_CAPACITY_THRESHOLD: int = 20 # Number of UEs that can be connected to a RU at once
+DU_CAPACITY_THRESHOLD: int = 6 # Number of UEs that can be connected to a DU at once
 # SETTINGS
 SHOW_EXPERIMENT_STATS: bool = True
 
@@ -47,13 +50,6 @@ class NetworkSimulationActionType(Enum):
     DU_SLEEP = 2
 
 # CLASSES
-
-class NetworkSimulationActionTuple:
-    def __init__(self, action_type: NetworkSimulationActionType, **kwargs) -> None:
-        self.action_type: NetworkSimulationActionType = action_type
-        self.arguments: dict = {}
-        for key, value in enumerate(kwargs):
-            self.arguments[key] = value
 
 class Point:
     def __init__(self,x: float,y: float)->None:
@@ -112,7 +108,7 @@ class O_RU:
     def connectDU(self,DU)->None:
         if self.connectedDU:
             self.connectedDU.removeRU(self)
-
+            self.connectedDU = None
         DU.connectRU(self)
         self.connectedDU = DU
 
@@ -171,12 +167,11 @@ class O_DU:
     def getConnectedRUs(self)->set:
         return self.connectedRUs
     
-    def getConnectedUEs(self)->list:
-        T = []
+    def getConnectedUEs(self)->set:
+        T = set()
         for unit in self.getConnectedRUs():
-            
             for ue in unit.getConnectedUEs():
-                T.append(ue)
+                T.add(ue)
         return T
 
     def getPosition(self)->Point:
@@ -207,8 +202,9 @@ class O_DU:
 class UE:
     def __init__(self, p: Point)->None:
         self.p: Point = p
-        self.RU = None
+        self.RU: O_RU | None = None
         self.freq: int = 3300 # MHz
+        self.delayBudget: float = 2e-2 # seconds
 
         self.turtle = turtle.Turtle()
         self.turtle.penup()
@@ -285,18 +281,12 @@ class NetworkSimulation:
         self.SimulationStatisticsTurtle.hideturtle()
         
     def generateChannelQualityMatrix(self) -> torch.Tensor:
-        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
+        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rsrp(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
         return torch.tensor(mathcalH, dtype=torch.float32)
     
     def generateGeoLocationMatrix(self) -> torch.Tensor:
         G = np.fromfunction(np.vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
         return torch.tensor(G, dtype=torch.float32)
-    
-    def generateConnectionQualityVector(self) -> torch.Tensor:
-        mathcalH = self.generateChannelQualityMatrix()
-        G = self.generateGeoLocationMatrix()
-        mathcalV = mathcalH*G
-        return torch.tensor(mathcalV, dtype=torch.float32)
     
     def generateDelayMatrix(self) -> torch.Tensor:
         mathcalP = np.fromfunction(np.vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
@@ -314,34 +304,23 @@ class NetworkSimulation:
         ue: UE
         for ue in self.UEs.values():
             if ue.getRU():
-                if rssi(ue.getRU(),ue) < -65:
+                if rsrp(ue.getRU(),ue) < RSRP_REWARD_THRESHOLD_DBM:
                     r += 1
         return r/len(self.UEs.values())
+    
+    def calculateRUCapacityReward(self) -> float:
+        return sum([0.5 if len(ru.getConnectedUEs()) <= RU_CAPACITY_THRESHOLD else -0.5 for ru in self.RUs.values()])
+    
+    def calculateDUCapacityReward(self) -> float:
+        return sum([0.5 if len(du.getConnectedUEs()) <= DU_CAPACITY_THRESHOLD else -0.5 for du in self.DUs.values()])
     
     def calculateSleepReward(self) -> float:
         return (len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()]))/(len(self.RUs.values()) + len(self.DUs.values()))
     
-    def calculateDUPowerReward(self) -> float:
-        r = 0
-        du: O_DU
-        for du in self.DUs.values():
-            if not du.status() and len(du.getConnectedRUs()) > 0:
-                r += 1
-        return r/len(self.DUs.values())
-    
-    def calculateNetworkCoverageReward(self) -> float:
-        r = 0
-        ue: UE
-        for ue in self.UEs.values():
-            if ue.getRU():
-                r += 1
-        return r/len(self.UEs.values())
-    
     def calculateReward(self) -> torch.Tensor:
         R_RU_power = self.calculateRUPowerReward()
-        R_DU_power = self.calculateDUPowerReward()
         
-        return torch.tensor(R_RU_power + R_DU_power - self.calculateSleepReward() + self.calculateNetworkCoverageReward(), dtype=torch.float32)
+        return torch.tensor((R_RU_power - self.calculateSleepReward() + self.calculateDUCapacityReward() + self.calculateRUCapacityReward())/(1+0.5*len(self.RUs.values())+0.5*len(self.DUs.values())), dtype=torch.float32)
         
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor

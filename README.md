@@ -35,7 +35,7 @@ h^{(t)}_{2,1} &  h^{(t)}_{2,2} &  \cdots &  h^{(t)}_{2,K}\\
 h^{(t)}_{\mathcal{N},1} &  h^{(t)}_{\mathcal{N},2} & \cdots & h^{(t)}_{\mathcal{N},K}
 \end{bmatrix}
 ```
-where $h^{(t)}_{i,j}$ is the RSS from radio unit $r_i$ to UE $u_j$ at time $t$.
+where $h^{(t)}_{i,j}$ is the RSRP from radio unit $r_i$ to UE $u_j$ at time $t$.
 
 At time $t$, define the geolocation matrix $G^{(t)} \in \mathbb{R}^{\mathcal{K} \times 2}$:
 
@@ -48,14 +48,6 @@ x_{\mathcal{K}}^{(t)} & y_{\mathcal{K}} ^{(t)}
 \end{bmatrix}
 ```
 where $x_i^{(t)}, y_i^{(t)}$ represents the geolocation of UE $u_i$ at time $t$.
-
-At time $t$, define the connection quality vector $\mathcal{V}^{(t)}$:
-
-```math
-\mathcal{V}^{(t)}=[G^{(t)}(1,:)\mathcal{H}^{(t)}(:,1),G^{(t)}(2,:) \mathcal{H}^{(t)}(:,2),
-\dots,
-G^{(t)}(\mathcal{K},:) \mathcal{H}^{(t)}(:,\mathcal{K})]
-```
 
 We define the delay matrix $\mathcal{P} \in \mathbb{R}^{\mathcal{N} \times L}$
 ```math
@@ -146,21 +138,15 @@ For the reward function, we want to penalize:
 
 Define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU power}} + \mathfrak{R}_{\text{DU power}}-\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|} - \frac{|\mathcal{U}_\text{coverage}|}{|\mathcal{U}|}
+\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU sleep}} -\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|}
 ```
 where
 ```math
 \mathfrak{R}_{\text{assignment}} = 1 -  \frac{| \delta_{\text{violated}}|}{|\delta|} 
 ```
 ```math
-\mathfrak{R}_{\text{RU power}} = \begin{cases}
-1 & \text{RSS} \geq -65 \\
--1 & \text{otherwise}
-\end{cases}
-```
-```math
-\mathfrak{R}_{\text{DU power}} = \begin{cases}
-1 & \text{The DU does not serve any RUs} \\
+\mathfrak{R}_{\text{RU sleep}} = \begin{cases}
+1 & \text{RSRP} \geq -80 \\
 -1 & \text{otherwise}
 \end{cases}
 ```
