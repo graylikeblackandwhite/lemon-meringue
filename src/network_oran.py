@@ -483,6 +483,20 @@ class NetworkSimulation:
         RUDUSwapSpace = torch.tensor([1 if ru.getDU() == du else 0 for ru, du in product(self.RUs.values(),self.DUs.values())])
         return torch.cat((RUsleepSpace,DUsleepSpace,RUDUSwapSpace), 0)
         
+    def step(self, step: int)->None:
+        self.mainLoopStep = step
+        self.UEConnectionTurtle.clear()
+        self.RUDUConnectionTurtle.clear()
+        self.SimulationStatisticsTurtle.clear()
+                        
+        self.updateStatisticsDisplay(step)
+                
+        self.updateComponentConnectionDisplay()
+            
+        self.updateUEs()
+        self.updateTotalEnergyConsumption()
+        self.screen.update()
+        
     def run(self, simulationLength: int)->None:
         self.initializeComponents()
         self.simulationLength = simulationLength
@@ -490,20 +504,8 @@ class NetworkSimulation:
         
         # Main loop
         for _ in range(0,simulationLength):
-            self.mainLoopStep = _
             time.sleep(self.timeStepLength)
-            self.UEConnectionTurtle.clear()
-            self.RUDUConnectionTurtle.clear()
-            self.SimulationStatisticsTurtle.clear()
-                        
-            if SHOW_EXPERIMENT_STATS:
-                self.updateStatisticsDisplay(_)
-                
-            self.updateComponentConnectionDisplay()
-            
-            self.updateUEs()
-            self.updateTotalEnergyConsumption()
-            self.screen.update()
+            self.step(_)
         self.writeResults()
 
 

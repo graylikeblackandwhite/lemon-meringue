@@ -1,1 +1,6 @@
-data/
+# Ignore all files in data/ and models/, but keep the directories
+data/*
+!data/.gitkeep
+
+models/*
+!models/.gitkeep
