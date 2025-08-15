@@ -123,8 +123,6 @@ class O_RU:
         self.turtle.shape(RU_OFF_IMAGE)
         self.active = False
         
-        print("haaa")
-        
         ue: UE    
         for ue in self.getConnectedUEs().copy():
             ue.detachFromRU()
@@ -309,7 +307,7 @@ class NetworkSimulation:
         return torch.tensor(mathcalZ, dtype=torch.float32)
     
     def generateStateVector(self) -> torch.Tensor:
-        return torch.flatten(torch.cat((torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())), 0))
+        return torch.flatten(torch.cat([torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())], 0))
     
     def calculateRUPowerReward(self) -> float:
         r = 0

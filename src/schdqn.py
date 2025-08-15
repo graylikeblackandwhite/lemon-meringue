@@ -48,8 +48,15 @@ class ReplayBuffer:
         
     def sample(self, batch_size):
         assert self.canSample(batch_size)
-        transitions = np.random.choice(self.buffer, batch_size, replace=False)
-        return transitions
+        transitions = random.sample(self.buffer, batch_size)
+        state_b, action_b, reward_b, next_state_b = zip(*transitions)
+    
+        state_b = torch.stack(state_b)                           # (batch, state_dim)
+        action_b = torch.stack(action_b).long().unsqueeze(1)     # (batch, 1)
+        reward_b = torch.stack(reward_b).float().unsqueeze(1)    # (batch, 1)
+        next_state_b = torch.stack(next_state_b)                 # (batch, state_dim)
+        
+        return state_b, action_b, reward_b, next_state_b
                     
     def canSample(self, batch_size)->bool:
         return len(self.buffer) >= batch_size * 10
@@ -57,7 +64,7 @@ class ReplayBuffer:
 class StochDQNAgent:
     # Stochastic DQN Agent.
     # Flatten s(t), feed into network.
-    def __init__(self, state_size: int, action_size: int, simulation: network_oran.NetworkSimulation, learning_rate: float=0.001, hidden_size=64, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01, use_cuda=False, deterministic=False, double=False) -> None:
+    def __init__(self, state_size: int, action_size: int, simulation: network_oran.NetworkSimulation, learning_rate: float=0.001, hidden_size=64, gamma=0.99, epsilon=0.1, epsilon_decay=0.995, epsilon_min=0.01, use_cuda=False, deterministic=False, double=False) -> None:
         self.state_size = state_size
         self.action_size = action_size
         self.simulation = simulation
@@ -83,7 +90,8 @@ class StochDQNAgent:
         self.batch_size = 2* self.log2_actions
         print(f"Batch size: {self.batch_size}")
         self.buffer_size = 2 * self.batch_size
-        self.replay_buffer = ReplayBuffer(self.buffer_size)
+        self.replay_buffer = ReplayBuffer(2000)
+
         self.deterministic = deterministic
         
         self.device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
@@ -94,36 +102,57 @@ class StochDQNAgent:
         self.double = double
         
     def stochPolicy(self, state):
-        if torch.rand(1) < self.epsilon:
-            return torch.randint(self.simulation.numDUs*self.simulation.numRUs*self.simulation.numDUs + self.simulation.numDUs + self.simulation.numRUs, (1,1))
+        rand = torch.rand(1)
+        #print(rand)
+        if rand.item() > 1-self.epsilon:
+            #print("Exploring!")
+            A = self.simulation.numDUs*self.simulation.numRUs*self.simulation.numDUs + self.simulation.numDUs + self.simulation.numRUs
+            exploited_action = torch.randint(0, A, (1,1))
+            return exploited_action
         else:
             # See Page 5 of the SDQN paper
+            A = self.simulation.numDUs*self.simulation.numRUs*self.simulation.numDUs + self.simulation.numDUs + self.simulation.numRUs
             av = self.model(state).detach()
-            return torch.argmax(av, dim=-1, keepdim=True)
-        
+            #print(self.replay_buffer.canSample(self.batch_size))
+            if self.replay_buffer.canSample(self.batch_size):
+                #print("hereeeee")
+                R = torch.randint(0,A,(1,self.batch_size))
+                _, action_sample, _, _ = self.replay_buffer.sample(self.batch_size)
+                #print(action_sample)
+                action_sample = action_sample.reshape(1,14)
+                C = torch.flatten(torch.cat((R,action_sample),0))
+                maxq = 0
+                for q in C:
+                    if av[q]>av[maxq]:
+                        maxq = q
+                maxq = torch.tensor(maxq)
+                return maxq
+            else:
+                return torch.argmax(av, dim=-1, keepdim=True)
     def interpretAction(self, action: torch.Tensor, simulation: network_oran.NetworkSimulation):
         int_action = action.item()
         L = simulation.numDUs
         N = simulation.numRUs*L
         
         if int_action in range(0,N-1):
-            print(f"Sleep {int_action-N}th RU")
+            #print(f"Sleep {int_action}th RU")
             RU: network_oran.O_RU = simulation.RUs[int_action]
             RU.sleep() if RU.status() else RU.wake()
         elif int_action in range(N, N+L):
-            print(f"Sleep {int_action-N}th DU")
+            #print(f"Sleep {int_action-N}th DU")
             DU: network_oran.O_DU = simulation.DUs[int_action-N]
             DU.sleep() if DU.status() else DU.wake()
         elif int_action in range(N+L+1, N+L+1+N*L):
             
             x = int_action-N-L
-            print(f"Make connection between {x%N}th RU, {x%L}th DU")
+            #print(f"Make connection between {x%N}th RU, {x%L}th DU")
             RU: network_oran.O_RU = simulation.RUs[x%N]
             DU: network_oran.O_DU = simulation.DUs[x%L]
             if not RU in DU.getConnectedRUs():
                 RU.connectDU(DU)
         else:
-            print("Do nothing")
+            #print("Do nothing")
+            pass
             
     def train(self, episodes):
         returns = []
@@ -159,22 +188,27 @@ class StochDQNAgent:
                     next_state: torch.Tensor = NS.generateStateVector()
                     reward: torch.Tensor = NS.calculateReward()
                     
-                    exp = (state,action.reshape(1),reward.reshape(1),next_state)
-                    #print(exp)
-
+                    action = action.view(-1)
+                    reward = torch.tensor([reward])
+                    
+                    exp = [state,action,reward,next_state]
                     self.replay_buffer.add(exp)
                     
                     if self.replay_buffer.canSample(self.batch_size):
-                        state_b, action_b, reward_b, next_state_b = (self.replay_buffer.sample(self.batch_size))
-                        
-                        print(state_b)
+                        sample = self.replay_buffer.sample(self.batch_size)
+                        #print(sample)
+                        state_b, action_b, reward_b, next_state_b = self.replay_buffer.sample(self.batch_size)
+                        action_b = action_b.reshape(14,1)
                         qsa_b = self.model(state_b).gather(1, action_b)
                         
                         next_qsa_b = self.target_model(next_state_b)
-
+                        next_qsa_b = torch.max(next_qsa_b, dim=-1, keepdim=True)[0]
+                        
+                        with torch.no_grad():
+                            next_qsa_max = self.target_model(next_state_b).max(1)[0].unsqueeze(1)
                         target_b = reward_b + self.gamma * next_qsa_b
                         
-                        loss = nn.functional.mse_loss(qsa_b, next_qsa_b)
+                        loss = nn.functional.mse_loss(qsa_b, target_b)
                     
                         self.model.zero_grad()
                         loss.backward()
@@ -193,7 +227,7 @@ class StochDQNAgent:
                     NS.screen.update()
                     
                     ep_return += reward.item()
-                print(ep_return)
+                #print(ep_return)
                 returns.append(ep_return)
                 self.epsilon = max(0, self.epsilon - self.epsilon_decay)
             if _ % 10 == 0:
