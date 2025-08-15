@@ -37,20 +37,20 @@ class StochDQNNetwork(nn.Module):
 class ReplayBuffer:
     def __init__(self, buffer_size):
         self.buffer_size = buffer_size
-        self.buffer = []
+        self.buffer = deque(maxlen=buffer_size)
         torch.set_printoptions(threshold=10000)
         
     def add(self,experience):
         self.buffer.append(experience)
         
+    def __sizeof__(self) -> int:
+        return len(self.buffer)
+        
     def sample(self, batch_size):
         assert self.canSample(batch_size)
-        transitions = random.sample(self.buffer, batch_size)
-        
-        batch = zip(*transitions)
+        transitions = np.random.choice(self.buffer, batch_size, replace=False)
+        return transitions
                     
-        return [torch.cat([item for item in items]) for items in batch]
-    
     def canSample(self, batch_size)->bool:
         return len(self.buffer) >= batch_size * 10
 
@@ -118,6 +118,7 @@ class StochDQNAgent:
             
         
     def train(self, episodes):
+        returns = []
         for _ in range(episodes):
             NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(3,6,50,1000)
             NS.running = True
@@ -128,11 +129,11 @@ class StochDQNAgent:
                 NS.updateUEs()
                 state = NS.generateStateVector()
                 
-                
+                ep_return = 0
                 # Main loop
                 for _ in range(0,NS.simulationLength):
                     action: torch.Tensor = self.stochPolicy(state)
-                    print(action.item())
+                    #print(action.item())
                     self.interpretAction(action, NS)
                     
                     NS.mainLoopStep = _
@@ -156,8 +157,9 @@ class StochDQNAgent:
                     self.replay_buffer.add(exp)
                     
                     if self.replay_buffer.canSample(self.batch_size):
-                        state_b, action_b, reward_b, next_state_b = self.replay_buffer.sample(self.batch_size)
+                        state_b, action_b, reward_b, next_state_b = (self.replay_buffer.sample(self.batch_size))
                         
+                        print(state_b)
                         qsa_b = self.model(state_b).gather(1, action_b)
                         
                         next_qsa_b = self.target_model(next_state_b)
@@ -182,6 +184,10 @@ class StochDQNAgent:
                     state = NS.generateStateVector()
                     NS.screen.update()
                     
+                    ep_return += reward.item()
+                print(ep_return)
+                returns.append(ep_return)
+                self.epsilon = max(0, self.epsilon - self.epsilon_decay)
             if _ % 10 == 0:
                 self.target_model.load_state_dict(self.model.state_dict())
     def updateTargetNetwork(self):
