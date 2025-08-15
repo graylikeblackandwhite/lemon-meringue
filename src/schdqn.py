@@ -66,7 +66,7 @@ class ReplayBuffer:
 class StochDQNAgent:
     # Stochastic DQN Agent.
     # Flatten s(t), feed into network.
-    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=0.995, epsilon_min=0.01, use_cuda=False, deterministic=False, double=False) -> None:
+    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=0.005, epsilon_min=0.05, use_cuda=False) -> None:
         self.device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
         print('device ', self.device)
         
@@ -124,7 +124,7 @@ class StochDQNAgent:
         elif int_action in range(N, N+L):
             #print(f"Sleep {int_action-N}th DU")
             DU: network_oran.O_DU = simulation.DUs[int_action-N]
-            DU.sleep() if DU.status() else DU.wake()
+            DU.sleep() if DU.status() and len(DU.getConnectedRUs()) == 0 else DU.wake()
         elif int_action in range(N+L+1, N+L+1+N*L):
             x = int_action-N-L
             #print(f"Make connection between {x%N}th RU, {x%L}th DU")
@@ -135,7 +135,7 @@ class StochDQNAgent:
         else:
             pass
         
-    def writeResults(self, episodes, simulationLength, rewards)->None:
+    def writeEpisodeResults(self, episodes, simulationLength, rewards)->None:
         data = {
             'Episode': [i+1 for i in range(episodes)],
             'Simulation Length (seconds)': [simulationLength for _ in range(episodes)],
@@ -146,25 +146,24 @@ class StochDQNAgent:
             
     def train(self, episodes):
         returns = []
-        for _ in range(episodes):
+        for episode in range(episodes):
             NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(3,6,50,1000,0)
             NS.running = True
             while NS.running:
                 NS.initializeComponents()
                 NS.simulationLength = 500
                 
-                NS.updateUEs()
+                NS.step(0)
                 state = NS.generateStateVector()
                 
                 ep_return = 0
                 # Main loop
-                for _ in range(0,NS.simulationLength):
+                for step in range(1,NS.simulationLength):
                     action: torch.Tensor = self.stochPolicy(state)
                     self.interpretAction(action, NS)
                     
-                    
                     time.sleep(NS.timeStepLength)
-                    NS.step(_)
+                    NS.step(step)
                     
                     next_state: torch.Tensor = NS.generateStateVector()
                     reward: torch.Tensor = NS.calculateReward()
@@ -191,19 +190,19 @@ class StochDQNAgent:
                         self.loss.backward()
                         self.optimizer.step()
                     
-                    NS.step(_)
+                    NS.step(step)
+                    if step % 50 == 0:
+                        self.target_model.load_state_dict(self.model.state_dict())
                     state = NS.generateStateVector()
                     ep_return += reward.item()
                 print(ep_return)
                 NS.running = False
                 returns.append(ep_return)
-                self.epsilon = max(0, self.epsilon - self.epsilon_decay)
+                self.epsilon = max(self.epsilon_min, self.epsilon - self.epsilon_decay)
                 break
             for turtle in NS.screen.turtles():
                 del turtle
             NS.screen.clearscreen()
-            if _ % 10 == 0:
-                self.target_model.load_state_dict(self.model.state_dict())
-        self.writeResults(episodes,1000,returns)
+        self.writeEpisodeResults(episodes,1000,returns)
         self.model.eval()
         torch.save(self.model.state_dict(), f"../models/stochdqn_{datetime.now()}.pth")
