@@ -18,12 +18,13 @@ class StateTransitionTuple:
         self.next_state = next_state
 
 class StochDQNNetwork(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
+    def __init__(self, input_size: int, output_size: int) -> None:
         super(StochDQNNetwork, self).__init__()
         self.device: torch.accelerator = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu" # type: ignore
         print(f"Using {self.device} device")
+        hidden_size = int((2/3) * input_size) + output_size
         self.loss: nn.MSELoss = nn.MSELoss() 
-        self.fc1: nn.Linear = nn.Linear(input_size, hidden_size)
+        self.fc1: nn.Linear = nn.Linear(input_size,  hidden_size)
         self.fc2: nn.Linear = nn.Linear(hidden_size, hidden_size)
         self.fcq: nn.Linear = nn.Linear(hidden_size, output_size)
         
@@ -36,18 +37,22 @@ class StochDQNNetwork(nn.Module):
 class ReplayBuffer:
     def __init__(self, buffer_size):
         self.buffer_size = buffer_size
-        self.buffer = deque(maxlen=buffer_size)
+        self.buffer = []
+        torch.set_printoptions(threshold=10000)
         
     def add(self,experience):
         self.buffer.append(experience)
         
     def sample(self, batch_size):
-        batch = np.random.choice(self.buffer, batch_size)
-        states, actions, rewards, next_states = zip(*batch)
-        return np.vstack(states), actions, rewards, np.vstack(next_states)
+        assert self.canSample(batch_size)
+        transitions = random.sample(self.buffer, batch_size)
+        
+        batch = zip(*transitions)
+                    
+        return [torch.cat([item for item in items]) for items in batch]
     
     def canSample(self, batch_size)->bool:
-        return len(self.buffer) >= batch_size 
+        return len(self.buffer) >= batch_size * 10
 
 class StochDQNAgent:
     # Stochastic DQN Agent.
@@ -57,8 +62,12 @@ class StochDQNAgent:
         self.action_size = action_size
         self.simulation = simulation
         
-        self.model: StochDQNNetwork = StochDQNNetwork(simulation.numDUs*simulation.numRUs*(2+simulation.numDUs) + simulation.numDUs, 64, simulation.numDUs*simulation.numRUs + simulation.numDUs + simulation.numRUs)
-        self.target_model: StochDQNNetwork = StochDQNNetwork(simulation.numDUs*simulation.numRUs*(2+simulation.numDUs) + simulation.numDUs, 64, simulation.numDUs*simulation.numRUs + simulation.numDUs + simulation.numRUs)
+        K = simulation.numUEs
+        L = simulation.numDUs
+        N = simulation.numRUs*L
+        
+        self.model: StochDQNNetwork = StochDQNNetwork(N*K+K*2+L+N*L, N*L+L+N)
+        self.target_model: StochDQNNetwork = StochDQNNetwork(N*K+K*2+L+N*L, N*L+L+N)
 
         self.target_model.load_state_dict(self.model.state_dict())
         
@@ -72,6 +81,7 @@ class StochDQNAgent:
         self.gamma = gamma
         
         self.batch_size = 2* self.log2_actions
+        print(f"Batch size: {self.batch_size}")
         self.buffer_size = 2 * self.batch_size
         self.replay_buffer = ReplayBuffer(self.buffer_size)
         self.deterministic = deterministic
@@ -91,17 +101,18 @@ class StochDQNAgent:
             av = self.model(state).detach()
             return torch.argmax(av, dim=-1, keepdim=True)
         
-    def interpretAction(self, action: int):
-        L = self.simulation.numDUs
-        N = self.simulation.numRUs*L
+    def interpretAction(self, action: torch.Tensor, simulation: network_oran.NetworkSimulation):
+        int_action = action.item()
+        L = simulation.numDUs
+        N = simulation.numRUs*L
         
-        if action in range(0,N-1):
-            RU: network_oran.O_RU = self.simulation.RUs[action]
+        if int_action in range(0,N-1):
+            RU: network_oran.O_RU = simulation.RUs[int_action]
             RU.sleep() if RU.status() else RU.wake()
-        elif action in range(N, N+L):
-            DU: network_oran.O_DU = self.simulation.DUs[action]
+        elif int_action in range(N, N+L):
+            DU: network_oran.O_DU = simulation.DUs[int_action-N]
             DU.sleep() if DU.status() else DU.wake()
-        elif action in range(N+L+1, N+L+1+N*L):
+        elif int_action in range(N+L+1, N+L+1+N*L):
             print("Poop switch")
             
             
@@ -120,9 +131,9 @@ class StochDQNAgent:
                 
                 # Main loop
                 for _ in range(0,NS.simulationLength):
-                    state: torch.Tensor = NS.generateStateVector()
                     action: torch.Tensor = self.stochPolicy(state)
-                    print(action)
+                    print(action.item())
+                    self.interpretAction(action, NS)
                     
                     NS.mainLoopStep = _
                     time.sleep(NS.timeStepLength)
@@ -137,9 +148,12 @@ class StochDQNAgent:
                     NS.screen.update()
                     
                     next_state: torch.Tensor = NS.generateStateVector()
-                    reward: float = NS.calculateReward()
+                    reward: torch.Tensor = NS.calculateReward()
                     
-                    self.replay_buffer.add((state,action,reward,next_state))
+                    exp = (state,action.reshape(1),reward.reshape(1),next_state)
+                    #print(exp)
+
+                    self.replay_buffer.add(exp)
                     
                     if self.replay_buffer.canSample(self.batch_size):
                         state_b, action_b, reward_b, next_state_b = self.replay_buffer.sample(self.batch_size)
@@ -165,6 +179,7 @@ class StochDQNAgent:
                     
                     NS.updateUEs()
                     NS.updateTotalEnergyConsumption()
+                    state = NS.generateStateVector()
                     NS.screen.update()
                     
             if _ % 10 == 0:

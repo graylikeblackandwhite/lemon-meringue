@@ -123,7 +123,7 @@ class O_RU:
         print("haaa")
         
         ue: UE    
-        for ue in self.getConnectedUEs():
+        for ue in self.getConnectedUEs().copy():
             ue.detachFromRU()
 
     def wake(self)->None:
@@ -285,28 +285,28 @@ class NetworkSimulation:
         
     def generateChannelQualityMatrix(self) -> torch.Tensor:
         mathcalH = np.fromfunction(np.vectorize(lambda i,j: rssi(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
-        return torch.tensor(mathcalH)
+        return torch.tensor(mathcalH, dtype=torch.float32)
     
     def generateGeoLocationMatrix(self) -> torch.Tensor:
         G = np.fromfunction(np.vectorize(lambda i,j: self.UEs[i].getPosition().x if j == 0 else self.UEs[i].getPosition().y), (self.numUEs,2), dtype=float)
-        return torch.tensor(G)
+        return torch.tensor(G, dtype=torch.float32)
     
     def generateConnectionQualityVector(self) -> torch.Tensor:
         mathcalH = self.generateChannelQualityMatrix()
         G = self.generateGeoLocationMatrix()
         mathcalV = mathcalH*G
-        return torch.tensor(mathcalV)
+        return torch.tensor(mathcalV, dtype=torch.float32)
     
     def generateDelayMatrix(self) -> torch.Tensor:
         mathcalP = np.fromfunction(np.vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
-        return torch.tensor(mathcalP)
+        return torch.tensor(mathcalP, dtype=torch.float32)
     
     def generateProcessingLoadVector(self) -> torch.Tensor:
         mathcalZ = [self.DUs[unit].getProcessingLoad() for unit in self.DUs]
-        return torch.tensor(mathcalZ)
+        return torch.tensor(mathcalZ, dtype=torch.float32)
     
     def generateStateVector(self) -> torch.Tensor:
-        return torch.cat((torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())), 0)
+        return torch.flatten(torch.cat((torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())), 0))
     
     def calculateRUPowerReward(self) -> float:
         ue: UE
@@ -322,11 +322,11 @@ class NetworkSimulation:
     def calculateDUPowerReward(self) -> float:
         return 1.0
     
-    def calculateReward(self) -> float:
+    def calculateReward(self) -> torch.Tensor:
         R_RU_power = self.calculateRUPowerReward()
         R_DU_power = self.calculateDUPowerReward()
         
-        return R_RU_power + self.calculateSleepReward()
+        return torch.tensor(R_RU_power + self.calculateSleepReward(), dtype=torch.float32)
         
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
