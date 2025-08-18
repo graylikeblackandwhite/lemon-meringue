@@ -130,36 +130,60 @@ Elaborate: Will we make a decision once every time interval or at every time ste
 
 Discourage switching DUs and RUs too frequently.
 
-For the reward function, we want to penalize:
-- Assigning RUs to more than one DU
-- Assigning RUs to a DU that violates the delay budget 
-- Switching off RCs when RSS would decrease past the acceptable limit for every UE associated with the RC
-- Switching off DUs when there are RUs assigned to it
-
-Define $\mathfrak{R}$ to be our reward function:
+Define functions
 ```math
-\mathfrak{R}_t=\mathfrak{R}_{\text{assignment}} + \mathfrak{R}_{\text{RU sleep}} -\frac{|\mathcal{R}_\text{activated}|}{|\mathcal{R}|}-\frac{|\mathcal{D}_\text{activated}|}{|\mathcal{D}|}
+C_\text{UE}(r_i) \triangleq \text{number of UEs connected to RU } r_i \in \mathcal{R}
+
+```
+
+```math
+C_\text{RU}(d_i) \triangleq \text{number of RUs connected to DU } d_i \in \mathcal{D}
+```
+
+```math
+R(u_i) \triangleq \text{RU serving UE $u_i$}
+```
+At time $t$, define $\mathfrak{R}$ to be our reward function:
+```math
+\mathfrak{R}^{(t)}=\alpha(\sum_{u_i\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u_i)+\sum_{d_i\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d_i)+\sum_{r_i\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r_i) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta(\mathfrak{R}^{(t)}_\text{average fronthaul delay})
 ```
 where
 ```math
-\mathfrak{R}_{\text{assignment}} = 1 -  \frac{| \delta_{\text{violated}}|}{|\delta|} 
-```
-```math
-\mathfrak{R}_{\text{RU sleep}} = \begin{cases}
-1 & \text{RSRP} \geq -80 \\
--1 & \text{otherwise}
+\mathfrak{R}^{(t)}_\text{RSRP}(u_i) \triangleq \begin{cases}
+1 & \text{RSRP}(u_i, R(u_i)) \geq \delta_\text{threshold}   \\
+-2 & \text{otherwise}
 \end{cases}
 ```
 ```math
-\mathcal{R}_\text{activated}=\text{the set of active RUs}
+\mathfrak{R}^{(t)}_\text{DU capacity}(d_i) \triangleq \begin{cases}
+1 & C_\text{RU}(d_i) \leq \phi_\text{DU}\\
+-2 & \text{otherwise}
+\end{cases}
 ```
 ```math
-\mathcal{D}_\text{activated}=\text{the set of active DUs}
+\mathfrak{R}^{(t)}_\text{RU capacity}(r_i) \triangleq \begin{cases}
+1 & C_\text{UE}(r_i) \leq \phi_\text{RU}\\
+-2 & \text{otherwise}
+\end{cases}
+```
+and
+```math
+\delta_\text{threshold} \in [-100, -80]
+```
+```math
+\alpha \in (0,1]
+```
+```math
+\beta \in (0,1]
+```
+```math
+\phi_\text{DU} \in \mathbb{Z}, \phi_\text{DU} > 0
+```
+```math
+\phi_\text{RU} \in \mathbb{Z}, \phi_\text{RU} > 0
 ```
 
-$| \delta_{\text{violated}} |$ is the number of delay budgets that were violated.
-- For example, if assigning an RU to a DU increased propagation delay to $x$, and $x$ violated the delay budget for URLLC traffic (2ms) and for eMBB (4ms), but not V2X (5ms), then $|\delta_{\text{violated}}|=2$.
-## Testbed
+## Testbed & Implementation
 We will be using a custom testbed environment built in Python (can be found in `src`) to train and test the model using these parameters:
 
 ### Experiment
@@ -168,6 +192,9 @@ We will be using a custom testbed environment built in Python (can be found in `
 - $m=4$ DUs
 - $k=50$ UEs moving in a random walk
 - 1000m by 1000m simulation area
+
+#### Implementation
+We use PyTorch to implement the stochastic DQN. We use $I \triangleq NL + NK + 2K + L$ nodes in the input layer, $A \triangleq NL+L+N+1$ nodes on the output layer and 2 layers of $\frac{2}{3}I+A$ nodes in the two hidden layers. For further improvements we plan on using a multiple input neural network.
 
 #### Other Models
 - DQN model found in [Wang et al.](https://ieeexplore.ieee.org/document/10942980)

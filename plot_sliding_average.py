@@ -4,7 +4,7 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 # Load the CSV file
-df = pd.read_csv('data/model_output2025-08-18 14:59:16.196301')
+df = pd.read_csv('data/model_output2025-08-18 16:16:42.262302')
 
 # Use the correct column names (handle possible unnamed index column)
 if 'Episode' not in df.columns:
