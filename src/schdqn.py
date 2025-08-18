@@ -61,15 +61,15 @@ class ReplayBuffer:
 class StochDQNAgent:
     # Stochastic DQN Agent.
     # Flatten s(t), feed into network.
-    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=1e-5, epsilon_min=0.05, epsilon_max =1.0, use_cuda=False) -> None:
+    def __init__(self, numRUs:int, numDUs: int, numUEs: int, learning_rate: float=1e-4, gamma=0.99, epsilon=0.9, epsilon_decay=1e-3, epsilon_min=0.05, epsilon_max =1.0, use_cuda=False, simulation_length_in_training: int=100) -> None:
         self.device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
         print('device ', self.device)
         
         self.K = numUEs
         self.L = numDUs
-        self.N = numRUs*self.L
-        
-        self.model: StochDQNNetwork = StochDQNNetwork(self.N*self.K+self.K*2+self.L+self.N*self.L, self.N*self.L+self.L+self.N)
+        self.N = numRUs
+        self.simulation_length_in_training = simulation_length_in_training
+        self.model: StochDQNNetwork = StochDQNNetwork(self.N*self.K+self.K*2+self.L+self.N*self.L, self.N*self.L+self.L+self.N+1)
         self.target_model: StochDQNNetwork = copy.deepcopy(self.model).to(self.device).eval()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -111,7 +111,7 @@ class StochDQNAgent:
     def interpretAction(self, action: torch.Tensor, simulation: network_oran.NetworkSimulation):
         int_action = action.item()
         L = simulation.numDUs
-        N = simulation.numRUs*L
+        N = simulation.numRUs
         
         if int_action in range(0,N-1):
             #print(f"Sleep {int_action}th RU")
@@ -144,25 +144,26 @@ class StochDQNAgent:
         returns = []
         losses = []
         for episode in range(episodes):
-            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N//self.L, self.L, self.K,1000,0)
+            print(f"Episode {episode+1}/{episodes}")
+            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N, self.L, self.K,1000,0)
             NS.running = True
             while NS.running:
                 NS.initializeComponents()
-                NS.simulationLength = 250
-                
+                NS.simulationLength = self.simulation_length_in_training
+
                 NS.step(0)
                 state = NS.generateStateVector()
+                print(state.shape)
                 
                 ep_return = 0
                 # Main loop
                 for step in range(1,NS.simulationLength):
                     action: torch.Tensor = self.stochPolicy(state)
                     self.interpretAction(action, NS)
-                    
+                    reward: torch.Tensor = NS.calculateReward()
                     NS.step(step)
                     
                     next_state: torch.Tensor = NS.generateStateVector()
-                    reward: torch.Tensor = NS.calculateReward()
                     
                     action = action.view(-1)
                     reward = torch.tensor([reward])
@@ -171,6 +172,7 @@ class StochDQNAgent:
                     self.replay_buffer.add(exp)
                     
                     if self.replay_buffer.canSample(self.batch_size):
+                        self.model.zero_grad()
                         state_b, action_b, reward_b, next_state_b = self.replay_buffer.sample(self.batch_size)
                         action_b = action_b.reshape(self.batch_size,1)
                         qsa_b = self.model(state_b).gather(1, action_b)
@@ -178,20 +180,22 @@ class StochDQNAgent:
                         next_qsa_b = self.target_model(next_state_b)
                         next_qsa_b = torch.max(next_qsa_b, dim=-1, keepdim=True)[0]
                         
-                        target_b = reward_b + self.gamma * next_qsa_b
+                        if step == NS.simulationLength-1:
+                            target_b = reward_b
+                        else:
+                            target_b = reward_b + self.gamma * next_qsa_b
                         
                         loss = nn.functional.mse_loss(qsa_b, target_b)
-                        self.model.zero_grad()
                         loss.backward()
                         self.optimizer.step()
-                        losses.append(loss.item())
                         
                     NS.step(step)
-                    if step % 200 == 0:
-                        self.target_model.load_state_dict(self.model.state_dict())
                     state = NS.generateStateVector()
+                    if (episode*self.simulation_length_in_training + step) % 200 == 0:
+                        self.target_model.load_state_dict(self.model.state_dict())
+                    
                     ep_return += reward.item()
-                #print(ep_return)
+                print(f"Episode {episode+1}/{episodes} - Return: {ep_return}")
                 NS.running = False
                 returns.append(ep_return)
                 
@@ -200,7 +204,11 @@ class StochDQNAgent:
             for turtle in NS.screen.turtles():
                 del turtle
             NS.screen.clearscreen()
-        self.writeEpisodeResults(episodes,1000,returns)
+            print(episode)
+            print(len(returns))
+            if episode % 50 == 0:
+                self.writeEpisodeResults(episode+1,self.simulation_length_in_training,returns)
+        
         self.model.eval()
         torch.save(self.model.state_dict(), f"../models/stochdqn_{datetime.now()}.pth")
         return returns

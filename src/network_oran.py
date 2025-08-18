@@ -24,7 +24,7 @@ rng: np.random.Generator = np.random.default_rng(seed=seed)
 # CONSTANTS
 
 c: float = 299792458 # speed of light
-RSRP_THRESHOLD_DBM: float = -90
+RSRP_THRESHOLD_DBM: float = -100
 RSRP_REWARD_THRESHOLD_DBM: float = -80 #dBm
 GRAPHICAL_SCALING_FACTOR: float = 0.85
 RU_SIGNAL_STRENGTH: float = 36.98 #dBm
@@ -247,6 +247,9 @@ class NetworkSimulation:
 
         self.numUEs = k
         self.UEs = {}
+        
+        self.alpha = 0.8
+        self.beta = 0.4
 
         self.simulationSideLength = s # in meters
         self.timeStepLength = dt # amount of time one frame goes for
@@ -281,7 +284,7 @@ class NetworkSimulation:
         self.SimulationStatisticsTurtle.hideturtle()
         
     def generateChannelQualityMatrix(self) -> torch.Tensor:
-        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rsrp(self.RUs[i],self.UEs[j])) ,(self.numRUs*self.numDUs, self.numUEs), dtype=float )
+        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rsrp(self.RUs[int(i)],self.UEs[int(j)])) ,(self.numRUs, self.numUEs), dtype=float )
         return torch.tensor(mathcalH, dtype=torch.float32)
     
     def generateGeoLocationMatrix(self) -> torch.Tensor:
@@ -289,7 +292,7 @@ class NetworkSimulation:
         return torch.tensor(G, dtype=torch.float32)
     
     def generateDelayMatrix(self) -> torch.Tensor:
-        mathcalP = np.fromfunction(np.vectorize(lambda i,j: self.RUs[j].getPosition().dist(self.DUs[i].getPosition())/c + self.DUs[i].getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)), (self.numDUs, self.numRUs*self.numDUs), dtype=float)
+        mathcalP = np.fromfunction(np.vectorize(lambda i,j: calculate_fronthaul_delay(self.RUs[j], self.DUs[i])), (self.numDUs, self.numRUs), dtype=float)
         return torch.tensor(mathcalP, dtype=torch.float32)
     
     def generateProcessingLoadVector(self) -> torch.Tensor:
@@ -299,28 +302,28 @@ class NetworkSimulation:
     def generateStateVector(self) -> torch.Tensor:
         return torch.flatten(torch.cat([torch.flatten(self.generateChannelQualityMatrix()),torch.flatten(self.generateGeoLocationMatrix()),torch.flatten(self.generateDelayMatrix()),torch.flatten(self.generateProcessingLoadVector())], 0))
     
-    def calculateRUPowerReward(self) -> float:
+    def calculate_ru_power_reward(self) -> float:
         r = 0
         ue: UE
         for ue in self.UEs.values():
             if ue.getRU():
                 if rsrp(ue.getRU(),ue) < RSRP_REWARD_THRESHOLD_DBM:
                     r += 1
-        return r/len(self.UEs.values())
+                else:
+                    r -= 2
+        return r
     
-    def calculateRUCapacityReward(self) -> float:
-        return sum([0.5 if len(ru.getConnectedUEs()) <= RU_CAPACITY_THRESHOLD else -0.5 for ru in self.RUs.values()])
+    def calculate_ru_capacity_reward(self) -> float:
+        return sum([1 if len(ru.getConnectedUEs()) <= RU_CAPACITY_THRESHOLD else -2.0 for ru in self.RUs.values()])
     
-    def calculateDUCapacityReward(self) -> float:
-        return sum([0.5 if len(du.getConnectedUEs()) <= DU_CAPACITY_THRESHOLD else -0.5 for du in self.DUs.values()])
+    def calculate_du_capacity_reward(self) -> float:
+        return sum([1 if len(du.getConnectedUEs()) <= DU_CAPACITY_THRESHOLD else -2.0 for du in self.DUs.values()])
     
-    def calculateSleepReward(self) -> float:
-        return (len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()]))/(len(self.RUs.values()) + len(self.DUs.values()))
+    def calculate_sleep_reward(self) -> float:
+        return (len([unit for unit in self.RUs.values() if unit.status()]) + len([unit for unit in self.DUs.values() if unit.status()]))
     
-    def calculateReward(self) -> torch.Tensor:
-        R_RU_power = self.calculateRUPowerReward()
-        
-        return torch.tensor((R_RU_power - self.calculateSleepReward() + self.calculateDUCapacityReward() + self.calculateRUCapacityReward())/(1+0.5*len(self.RUs.values())+0.5*len(self.DUs.values())), dtype=torch.float32)
+    def calculateReward(self) -> torch.Tensor: 
+        return torch.tensor(((self.calculate_ru_power_reward() + self.calculate_sleep_reward() + self.calculate_du_capacity_reward() + self.calculate_ru_capacity_reward())*self.alpha - self.beta*self.calculate_average_fronthaul_delay()), dtype=torch.float32)
         
     def updateTotalEnergyConsumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
@@ -375,6 +378,16 @@ class NetworkSimulation:
                 self.UEConnectionTurtle.pendown()
                 self.UEConnectionTurtle.goto(ue.getRU().getPosition().x/GRAPHICAL_SCALING_FACTOR, ue.getRU().getPosition().y/GRAPHICAL_SCALING_FACTOR)
                 self.UEConnectionTurtle.penup()
+                
+    def calculate_average_fronthaul_delay(self) -> float:
+        total_delay = 0.0
+        count = 0
+        for ru in self.RUs.values():
+            if ru.getDU():
+                delay = calculate_fronthaul_delay(ru, ru.getDU())
+                total_delay += delay
+                count += 1
+        return total_delay / count if count > 0 else 0.0
             
     def initializeComponents(self):
         self.RUs = {}
@@ -386,11 +399,11 @@ class NetworkSimulation:
             D_THETA = np.rad2deg(np.pi*du/self.numDUs)
             newDU = O_DU(Point(DU_DISTANCE_FROM_CENTER*np.cos(D_THETA),DU_DISTANCE_FROM_CENTER*np.sin(D_THETA)))
             self.DUs[du] = newDU
-            for ru in range(self.numRUs):
-                R_THETA = np.rad2deg(2*np.pi*ru/self.numRUs)
-                newRU = O_RU(Point(RU_DISTANCE_FROM_DU*np.cos(R_THETA) + newDU.getPosition().x,RU_DISTANCE_FROM_DU*np.sin(R_THETA) + newDU.getPosition().y))
-                self.RUs[len(self.RUs)] = newRU
-                newRU.connectDU(newDU)
+        for ru in range(self.numRUs):
+            R_THETA = np.rad2deg(2*np.pi*ru/self.numRUs)
+            newRU = O_RU(createRandomPoint(self.simulationSideLength/2))
+            self.RUs[len(self.RUs)] = newRU
+            newRU.connectDU(self.DUs[np.random.randint(0,self.numDUs)]) # Randomly connect RU to DU
 
         for id in range(self.numUEs):
             # Create k UEs, assign IDs to them.
@@ -489,6 +502,11 @@ class NetworkSimulation:
 
 
 # FUNCTIONS
+
+def calculate_fronthaul_delay(ru: O_RU, du: O_DU)->float:
+    # This function generates the fronthaul delay based on the paper "Dynamic Placement of O-CU and O-DU Functionalities in Open-RAN Architecture" by Hojeij et al.
+    # The delay is calculated as the distance between RU and DU divided by the speed of light, plus a processing load factor.
+    return ru.getPosition().dist(du.getPosition())/c + du.getProcessingLoad()*0.035 + 0.4 * rng.uniform(0.025,0.25)
 
 def calculatePathLoss(ru: O_RU, ue: UE)->float:
     #UMi path loss based on https://www.etsi.org/deliver/etsi_tr/138900_138999/138901/18.00.00_60/tr_138901v180000p.pdf
