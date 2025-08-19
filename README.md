@@ -141,7 +141,7 @@ C_\text{RU}(d_i) \triangleq \text{number of RUs connected to DU } d_i \in \mathc
 ```
 
 ```math
-R(u_i) \triangleq \text{RU serving UE $u_i$}
+R(u_i) \triangleq \text{RU serving UE }u_i
 ```
 At time $t$, define $\mathfrak{R}$ to be our reward function:
 ```math
