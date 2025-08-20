@@ -4,7 +4,7 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 # Load the CSV file
-df = pd.read_csv('data/model_output2025-08-18 17:06:29.510599')
+df = pd.read_csv('data/model_output2025-08-19 10:17:42.580821')
 
 # Use the correct column names (handle possible unnamed index column)
 if 'Episode' not in df.columns:
@@ -14,7 +14,7 @@ if 'Episode' not in df.columns:
 def sliding_average(data, window):
     return np.convolve(data, np.ones(window)/window, mode='valid')
 
-window_size = 200
+window_size = 250
 episodes = df['Episode'].values
 rewards = df['Reward'].values
 avg_rewards = sliding_average(rewards, window_size)

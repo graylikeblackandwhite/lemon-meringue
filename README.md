@@ -16,12 +16,10 @@ Q-learning requires three structures:
 | Number of radio units        | $\mathcal{N}$                                                |
 | Number of user equipments    | $\mathcal{K}$                                                |
 | Number of distributed units  | $L$                                                          |
-| Number of traffic types      | $\mathbf{K}$                                                 |
 | **Sets**                     |                                                              |
 | Set of UEs                   | $\mathcal{U}=u_1, u_2, \dots, u_{\mathcal{K}}$               |
 | Set of DUs                   | $\mathcal{D} = d_1,d_2,\dots,d_{L}$                          |
 | Set of RUs                   | $\mathcal{R}=r_1,r_2,\dots,r_{\mathcal{N}}$                  |
-| Set of delay budgets (in ms) | $\mathfrak{D} = \delta_1,\delta_2,\dots,\delta_{\mathbf{K}}$ |
 
 The $\mathcal{K}$ RUs are connected to $L$ DUs through a mesh topology, so these RUs can choose particular DUs to perform their higher-level physical layer functions.
 
@@ -145,7 +143,7 @@ R(u_i) \triangleq \text{RU serving UE }u_i
 ```
 At time $t$, define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}^{(t)}=\alpha(\sum_{u_i\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u_i)+\sum_{d_i\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d_i)+\sum_{r_i\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r_i) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta(\mathfrak{R}^{(t)}_\text{average fronthaul delay})
+\mathfrak{R}^{(t)}=\alpha(\sum_{u_i\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u_i)+\sum_{d_i\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d_i)+\sum_{r_i\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r_i) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta(\mu_\text{fronthaul delay})
 ```
 where
 ```math
@@ -154,6 +152,7 @@ where
 -2 & \text{otherwise}
 \end{cases}
 ```
+and the connection capacity rewards, where $\phi_\text{DU}$ is the maximum amount of RUs that should be connected to a DU, and $\phi_\text{UE}$ is the maximum amount of UEs that should be connected to an RU:
 ```math
 \mathfrak{R}^{(t)}_\text{DU capacity}(d_i) \triangleq \begin{cases}
 1 & C_\text{RU}(d_i) \leq \phi_\text{DU}\\
@@ -170,6 +169,7 @@ and
 ```math
 \delta_\text{threshold} \in [-100, -80]
 ```
+we have constants $\alpha$ and $\beta$, which give weight to the different constraints found in the reward function, e.g., if you want to prioritize energy efficiency, you can set $\alpha=1$, and $\beta=0.5$.
 ```math
 \alpha \in (0,1]
 ```
