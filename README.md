@@ -1,7 +1,5 @@
 # Stochastic Deep Q-Learning Model for Joint Optimization of 5G Cellular Network Delay and Energy Efficiency
 
-**Abstract:** 
-
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs.
 
 **Topology:** We have a mesh topology between the RUs and DUs, i.e., any RU can have any DU perform its higher PHY functions. There are many RUs connected to one DU. One RU cannot be connected to more than one DU.
@@ -188,14 +186,20 @@ We will be using a custom testbed environment built in Python (can be found in `
 
 ### Experiment
 #### Parameters
-- $n=16$ RUs evenly spaced at 100m
-- $m=4$ DUs
-- $k=50$ UEs moving in a random walk
+- $n=24$ RUs evenly spaced at 100m
+- $m=6$ DUs
+- $k=80$ UEs moving in a random walk
 - 1000m by 1000m simulation area
 
 #### Implementation
 We use PyTorch to implement the stochastic DQN. We use $I \triangleq NL + NK + 2K + L$ nodes in the input layer, $A \triangleq NL+L+N+1$ nodes on the output layer and 2 layers of $\frac{2}{3}I+A$ nodes in the two hidden layers. For further improvements we plan on using a multiple input neural network.
 
-#### Other Models
-- DQN model found in [Wang et al.](https://ieeexplore.ieee.org/document/10942980)
-- Base simulation, no model
+#### Running the Code
+Evaluate the model by pulling the repo, then running
+
+```bash
+cd stochdqn-oran/test
+python3 train.py
+```
+
+Pretrained models can also be found in `models`
