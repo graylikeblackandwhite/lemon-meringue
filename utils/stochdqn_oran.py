@@ -79,7 +79,7 @@ class StochDQNAgent:
         
         self.batch_size = 8* self.log2_actions
         print(f"Batch size: {self.batch_size}")
-        self.replay_buffer = ReplayBuffer(20000)
+        self.replay_buffer = ReplayBuffer(250000)
         
     def stoch_policy(self, state: torch.Tensor) -> torch.Tensor:
         rand = torch.rand(1)
@@ -137,9 +137,8 @@ class StochDQNAgent:
         df = pd.DataFrame(data)
         df.to_csv(f'../data/model_output{datetime.now()}')
             
-    def train(self, episodes):
-        returns = []
-        losses = []
+    def train(self, episodes: int):
+        returns: list[float] = []
         for episode in range(1,episodes+1):
             print(f"Episode {episode}/{episodes}")
             NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N, self.L, self.K,1000,0)
@@ -161,10 +160,10 @@ class StochDQNAgent:
 
                     next_state: torch.Tensor = NS.generate_state_vector()
 
-                    action = action.view(-1)
-                    reward = torch.tensor([reward])
+                    action: torch.Tensor = action.view(-1)
+                    reward: torch.Tensor = torch.tensor([reward])
                     
-                    exp = [state,action,reward,next_state]
+                    exp: list[torch.Tensor] = [state,action,reward,next_state]
                     self.replay_buffer.add(exp)
                     
                     if self.replay_buffer.can_sample(self.batch_size):
@@ -200,7 +199,7 @@ class StochDQNAgent:
             for turtle in NS.screen.turtles():
                 del turtle
             NS.screen.clearscreen()
-            if episode % 50 == 0:
+            if episode % 100 == 0:
                 self.writeEpisodeResults(episode,self.simulation_length_in_training,returns)
         
         self.model.eval()

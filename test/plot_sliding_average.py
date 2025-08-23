@@ -11,6 +11,8 @@ latest_file = max(list_of_files, key=os.path.getctime)
 # Load the CSV file
 df = pd.read_csv(latest_file)
 
+print(df.columns)
+
 # Use the correct column names (handle possible unnamed index column)
 if 'Episode' not in df.columns:
     df.columns = ['Index', 'Episode', 'Simulation Length (seconds)', 'Reward']
@@ -19,7 +21,7 @@ if 'Episode' not in df.columns:
 def sliding_average(data, window):
     return np.convolve(data, np.ones(window)/window, mode='valid')
 
-window_size = 250
+window_size = 400
 episodes = df['Episode'].values
 rewards = df['Reward'].values
 avg_rewards = sliding_average(rewards, window_size)
