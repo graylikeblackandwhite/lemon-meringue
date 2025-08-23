@@ -2,6 +2,7 @@
 # The StochDQN is DQN but it uses a stochastic arg max as well as a stochastic optimizer
 import copy
 import random
+from tkinter import NS
 import numpy as np
 import torch
 import utils.network_oran as network_oran
@@ -136,6 +137,10 @@ class StochDQNAgent:
             }
         df = pd.DataFrame(data)
         df.to_csv(f'../data/model_output{datetime.now()}')
+        
+    def load(self, PATH: str):
+        self.model.load_state_dict(torch.load(PATH))
+        self.model.eval()
             
     def train(self, episodes: int):
         returns: list[float] = []
@@ -155,9 +160,8 @@ class StochDQNAgent:
                 for step in range(1,NS.simulation_length):
                     action: torch.Tensor = self.stoch_policy(state)
                     self.interpret_action(action, NS)
-                    reward: torch.Tensor = NS.calculate_reward()
                     NS.step(step)
-
+                    reward: torch.Tensor = NS.calculate_reward()
                     next_state: torch.Tensor = NS.generate_state_vector()
 
                     action: torch.Tensor = action.view(-1)

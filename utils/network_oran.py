@@ -151,10 +151,8 @@ class O_RU:
     def get_processing_load(self)->float:
         GOPS = 0
         for ue in self.get_connected_ues():
-            GOPS += 0.4*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
-        self.processing_load = GOPS/1600
-        if self.processing_load > 1:
-            self.processing_load = 1
+            GOPS += 0.15 + 0.4*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
+        self.processing_load = max(1,GOPS/1600)
         return self.processing_load
 
 
@@ -207,10 +205,8 @@ class O_DU:
         # This function generates GOPS according to the paper "Dynamic Placement of O-CU and O-DU Functionalities in Open-RAN Architecture" by Hojeij et al.
         GOPS = 0
         for ue in self.get_connected_ues():
-            GOPS += 0.5*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
-        self.processing_load = GOPS/1600
-        if self.processing_load > 1:
-            self.processing_load = 1
+            GOPS += 0.15 + 0.5*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
+        self.processing_load = max(1, GOPS/1600)
         return self.processing_load
 
     def status(self)->bool:
@@ -251,7 +247,7 @@ class UE:
         return self.RU # type: ignore
 
 class NetworkSimulation:
-    def __init__(self, n: int, m: int, k: int, s: float, dt=0.1)->None:
+    def __init__(self, n: int, m: int, k: int, s: float, dt=0.1, seed=42)->None:
         self.main_loop_step = -1
         self.running = False
         
@@ -266,6 +262,7 @@ class NetworkSimulation:
         
         self.alpha = 1.2
         self.beta = 0.4
+        self.seed = 42
 
         self.simulation_side_length = s # in meters
         self.time_step_length = dt # amount of time one frame goes for
@@ -416,6 +413,8 @@ class NetworkSimulation:
         self.dus = {}
         self.ues = {}
         
+        np.random.seed(self.seed)
+        rng = np.random.default_rng(seed=self.seed)
         for du in range(self.num_dus):
             # Create m DUs, assign IDs to them
             # Place the DUs automatically

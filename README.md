@@ -203,3 +203,5 @@ python3 train.py
 ```
 
 Pretrained models can also be found in `models`
+
+`stochastic_dqn_alpha_1.2_beta_0.4` and `stochastic_dqn_alpha_0.6_beta_0.4` both are neural networks which take an input of size $NL+2K+NK+L$, in this case, the input is of size 2230, $N=24,L=6,K=80$ 
