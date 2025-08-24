@@ -21,7 +21,7 @@ if 'Episode' not in df.columns:
 def sliding_average(data, window):
     return np.convolve(data, np.ones(window)/window, mode='valid')
 
-window_size = 400
+window_size = 250
 episodes = df['Episode'].values
 rewards = df['Reward'].values
 avg_rewards = sliding_average(rewards, window_size)

@@ -11,19 +11,20 @@ from utils import NetworkSimulation
 import pandas as pd
 
 STOCH_DQN_ALPHA_1_2_BETA_0_4 = '../models/stochastic_dqn_alpha_1.2_beta_0.4.pth'
-STOCH_DQN_ALPHA_0_6_BETA_0_4 = '../models/stochastic_dqn_alpha_0.6_beta_0.4.pth'
 
 if __name__ == '__main__':
     K = 80
     L = 6
     N = 24
     
-    simulation_length = 43200
+    simulation_length = 200_000
     
     agent: StochDQNAgent = StochDQNAgent(N,L,K)
     agent.load(STOCH_DQN_ALPHA_1_2_BETA_0_4)
     
     NS_1 = NetworkSimulation(N,L,K, 1000, seed=724) # Energy efficient reward model
+    NS_1.alpha = 1.2
+    NS_1.beta = 0.4
     NS_1.running = True
     NS_1.initialize_components()
     NS_1.simulation_length = simulation_length

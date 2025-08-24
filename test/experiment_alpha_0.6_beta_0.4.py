@@ -18,12 +18,14 @@ if __name__ == '__main__':
     L = 6
     N = 24
     
-    simulation_length = 43200
+    simulation_length = 200_000
     
     agent: StochDQNAgent = StochDQNAgent(N,L,K)
     agent.load(STOCH_DQN_ALPHA_0_6_BETA_0_4)
     
     NS_2 = NetworkSimulation(N,L,K, 1000, seed=724) # Balanced reward model
+    NS_2.alpha = 0.6
+    NS_2.beta = 0.4
     NS_2.running = True
     NS_2.initialize_components()
     NS_2.simulation_length = simulation_length

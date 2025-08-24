@@ -19,7 +19,7 @@ if __name__ == '__main__':
     L = 6
     N = 24
     
-    simulation_length = 43200
+    simulation_length = 200_000
     
     agent: StochDQNAgent = StochDQNAgent(N,L,K)
     agent.load(STOCH_DQN_ALPHA_1_2_BETA_0_4)

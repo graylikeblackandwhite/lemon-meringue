@@ -151,7 +151,7 @@ class O_RU:
     def get_processing_load(self)->float:
         GOPS = 0
         for ue in self.get_connected_ues():
-            GOPS += 0.15 + 0.4*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
+            GOPS += 0.4*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
         self.processing_load = max(1,GOPS/1600)
         return self.processing_load
 
@@ -205,7 +205,7 @@ class O_DU:
         # This function generates GOPS according to the paper "Dynamic Placement of O-CU and O-DU Functionalities in Open-RAN Architecture" by Hojeij et al.
         GOPS = 0
         for ue in self.get_connected_ues():
-            GOPS += 0.15 + 0.5*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
+            GOPS += 0.5*(3*ue.get_ru().number_of_transmission_antennas + ue.get_ru().number_of_transmission_antennas**2 + ue.get_ru().modulation_order*ue.get_ru().code_rate*ue.get_ru().MIMO_layers/3)/5
         self.processing_load = max(1, GOPS/1600)
         return self.processing_load
 
