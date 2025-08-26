@@ -3,6 +3,11 @@
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs.
 
 **Topology:** We have a mesh topology between the RUs and DUs, i.e., any RU can have any DU perform its higher PHY functions. There are many RUs connected to one DU. One RU cannot be connected to more than one DU.
+
+**TODO:** 
+- Implement mutli-input neural network for the DQN
+- Use graph neural network (the RU-DU associations are a bipartite graph, keeping this information is important)
+- Implement ASMs in action space, a high UE count would make switching off components infeasible
 ## Model
 A [stochastic Q-learning model](https://arxiv.org/abs/2405.10310) is used to solve this problem, because it can have a large discrete action space.
 
@@ -63,6 +68,24 @@ p^{(t)}_{i,j}=\text{propagation delay}_\text{DL} + \text{scheduling delay}_\text
 from RU $\mathcal{R}_i$ to DU $\mathcal{D}_j$.
 
 At time $t$, define a processing load vector $\mathcal{Z}^{(t)} \in \mathbb{R}^L$, where $\mathcal{Z}_i$ is the overall CPU utilization of du $d_i$.
+
+Finally, at time $t$, define the $\mathcal{N} \times L$ biadjacency matrix $\mathcal{Y}$, where
+
+```math
+\mathcal{Y}=\begin{bmatrix}
+y_{1,1} & y_{1,2} & \cdots & y_{1,L} \\
+y_{2,1} & y_{2.2} & \cdots & y_{2,L} \\
+\vdots & \vdots & \ddots & \vdots \\
+y_{\mathcal{N},1} & y_{\mathcal{N},2} & \cdots & y_{\mathcal{N},L}
+\end{bmatrix}
+```
+
+```math
+y_{i,j} = \begin{cases}
+1 & \text{RU } i\text{ is associated with DU } j \\
+0 & \text{otherwise}
+\end{cases}
+```
 
 
 We represent our state with the vector $s^{(t)}$:
@@ -139,9 +162,16 @@ C_\text{RU}(d_i) \triangleq \text{number of RUs connected to DU } d_i \in \mathc
 ```math
 R(u_i) \triangleq \text{RU serving UE }u_i
 ```
+
+Additionally, define the term $\mathcal{W}$,
+```math
+\mathcal{W} = \frac{-80|\mathcal{U}|+|\mathcal{D}|+|\mathcal{R}_\text{sleep}|+|\mathcal{D}_\text{sleep}|}{(1-c)|\mathcal{R}|}
+```
+
+
 At time $t$, define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}^{(t)}=\alpha(\sum_{u_i\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u_i)+\sum_{d_i\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d_i)+\sum_{r_i\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r_i) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta(\mu_\text{fronthaul delay})
+\mathfrak{R}^{(t)}=\frac{\alpha(\sum_{u\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u)+\sum_{d\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d)+\sum_{r\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta\mathcal{W}\sum_{r\in\mathcal{R}}\delta(r)}{2W}
 ```
 where
 ```math

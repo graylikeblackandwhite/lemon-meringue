@@ -356,7 +356,7 @@ class NetworkSimulation:
             if ru.status():
                 self.total_energy_consumption += (ru.get_processing_load()*(E_RU_max + E_RU_idle) + E_RU_idle)*(1/3600)
 
-    def get_total_energy_consumption(self):
+    def get_total_energy_consumption(self)->float:
         return self.total_energy_consumption
 
     def update_statistics_display(self, _: int):

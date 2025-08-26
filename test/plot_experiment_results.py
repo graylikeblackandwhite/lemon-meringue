@@ -6,9 +6,8 @@ values = [650, 469.7, 472.4]
 
 # Plot
 plt.figure(figsize=(7, 5))
-bars = plt.bar(labels, values, color=['gray', 'skyblue', 'orange'])
+bars = plt.bar(labels, values, color=['gray', 'skyblue', 'red'])
 plt.ylabel('Energy (kWh)')
-plt.title('Energy Consumption Comparison')
 plt.ylim(0, 700)
 
 # Annotate bars
