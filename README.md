@@ -1,13 +1,15 @@
-# Stochastic Deep Q-Learning Model for Joint Optimization of 5G Cellular Network Delay and Energy Efficiency
+# STATRIX: A Joint Minimization Model for Power Consumption and Fronthaul Delay in 5G O-RAN
 
 **Objective:** Minimize the number of active radio units and distributed units, assign RUs to DUs.
 
 **Topology:** We have a mesh topology between the RUs and DUs, i.e., any RU can have any DU perform its higher PHY functions. There are many RUs connected to one DU. One RU cannot be connected to more than one DU.
 
+**Problems with other models:** *Wang et. al.*'s model shows significant energy savings, but assumes a fixed number of static UEs. This can make deployment of the model impractical in most cases, e.g., mobile networks. 
+
 **TODO:** 
-- Implement mutli-input neural network for the DQN
-- Use graph neural network (the RU-DU associations are a bipartite graph, keeping this information is important)
-- Implement ASMs in action space, a high UE count would make switching off components infeasible
+- Handle UE problem (UEs will leave and join the network, if the model is already trained with $K$ UEs, it will have to retrain! Extremely impractical!)
+- Implement ASMs in action space, a high UE count would make switching off entire components infeasible
+
 ## Model
 A [stochastic Q-learning model](https://arxiv.org/abs/2405.10310) is used to solve this problem, because it can have a large discrete action space.
 
@@ -26,77 +28,39 @@ Q-learning requires three structures:
 
 The $\mathcal{K}$ RUs are connected to $L$ DUs through a mesh topology, so these RUs can choose particular DUs to perform their higher-level physical layer functions.
 
-At time $t$, define the channel quality matrix $\mathcal{H}^{(t)} \in \mathbb{R}^{\mathcal{N} \times \mathcal{K}}$:
+At time $t$, define the $\mathcal{N}\times 1$ channel quality vector $\mathcal{H}^{(t)}$:
 
 ```math
 \mathcal{H}^{(t)}=\begin{bmatrix}
-h^{(t)}_{1,1} &  h^{(t)}_{1,2} &  \cdots &  h^{(t)}_{1,K}\\
-h^{(t)}_{2,1} &  h^{(t)}_{2,2} &  \cdots &  h^{(t)}_{2,K}\\
-\vdots  &  \vdots &  \ddots &  \vdots\\
-h^{(t)}_{\mathcal{N},1} &  h^{(t)}_{\mathcal{N},2} & \cdots & h^{(t)}_{\mathcal{N},K}
+h^{(t)}_1 \\
+h^{(t)}_2 \\
+\vdots \\
+h^{(t)}_\mathcal{N}
 \end{bmatrix}
 ```
-where $h^{(t)}_{i,j}$ is the RSRP from radio unit $r_i$ to UE $u_j$ at time $t$.
+where $h^{(t)}_{i}$ is the mean RSRP of RU $i$.
 
-At time $t$, define the geolocation matrix $G^{(t)} \in \mathbb{R}^{\mathcal{K} \times 2}$:
-
+We define the $\mathcal{N} \times L$ delay matrix $\mathcal{M}$
 ```math
-G^{(t)}=\begin{bmatrix}
-x_1^{(t)} & y_1^{(t)} \\
-x_2^{(t)} & y_2^{(t)} \\
-\vdots & \vdots  \\
-x_{\mathcal{K}}^{(t)} & y_{\mathcal{K}} ^{(t)}
-\end{bmatrix}
-```
-where $x_i^{(t)}, y_i^{(t)}$ represents the geolocation of UE $u_i$ at time $t$.
-
-We define the delay matrix $\mathcal{P} \in \mathbb{R}^{\mathcal{N} \times L}$
-```math
-\mathcal{P}^{(t)}=
+\mathcal{M}^{(t)}=
 \begin{bmatrix}
-p^{(t)}_{1,1} &  p^{(t)}_{1,2}&  \cdots&  p^{(t)}_{1,L}\\
-p^{(t)}_{2,1} &  p^{(t)}_{2,2}&  \cdots&  p^{(t)}_{2,L}\\
+m^{(t)}_{1,1} &  m^{(t)}_{1,2}&  \cdots&  m^{(t)}_{1,L}\\
+m^{(t)}_{2,1} &  m^{(t)}_{2,2}&  \cdots&  m^{(t)}_{2,L}\\
  \vdots&  \vdots&  \ddots&  \vdots\\
- p^{(t)}_{\mathcal{N},1}&  p^{(t)}_{\mathcal{N},2}&  \cdots& p^{(t)}_{\mathcal{N}, L}
+ m^{(t)}_{\mathcal{N},1}&  m^{(t)}_{\mathcal{N},2}&  \cdots& m^{(t)}_{\mathcal{N}, L}
 \end{bmatrix}
 ```
 where 
 
 ```math
-p^{(t)}_{i,j}=\text{propagation delay}_\text{DL} + \text{scheduling delay}_\text{DL}
+m^{(t)}_{i,j}=\text{total delay from RU } i \text{ to DU }j
 ```
 from RU $\mathcal{R}_i$ to DU $\mathcal{D}_j$.
 
-At time $t$, define a processing load vector $\mathcal{Z}^{(t)} \in \mathbb{R}^L$, where $\mathcal{Z}_i$ is the overall CPU utilization of du $d_i$.
-
-Finally, at time $t$, define the $\mathcal{N} \times L$ biadjacency matrix $\mathcal{Y}$, where
+We represent our state with the matrix $s^{(t)}$,
 
 ```math
-\mathcal{Y}=\begin{bmatrix}
-y_{1,1} & y_{1,2} & \cdots & y_{1,L} \\
-y_{2,1} & y_{2.2} & \cdots & y_{2,L} \\
-\vdots & \vdots & \ddots & \vdots \\
-y_{\mathcal{N},1} & y_{\mathcal{N},2} & \cdots & y_{\mathcal{N},L}
-\end{bmatrix}
-```
-
-```math
-y_{i,j} = \begin{cases}
-1 & \text{RU } i\text{ is associated with DU } j \\
-0 & \text{otherwise}
-\end{cases}
-```
-
-
-We represent our state with the vector $s^{(t)}$:
-```math
-s^{(t)}=
-[
-P^{(t)},
-\mathcal{H}^{(t)},
-G^{(t)},
-\mathcal{Z}^{(t)}
-]
+s^{(t)}\triangleq \mathcal{M}\mathcal{H}^\intercal
 ```
 ### 2. Action space
 The action space here is discrete-- we only want the agent to be able to reassign RUs to DUs and either wake up RUs/DUs or put them to sleep.
@@ -111,19 +75,25 @@ The action space here is discrete-- we only want the agent to be able to reassig
  a_{i,j}=\begin{cases} 1 & \text{RU i is assisted by DU j }\ 0 & \text{otherwise} \end{cases}
  ```
 
-Define a vector in $\mathcal{B} \in \mathbb{R}^{\mathcal{N}}$, which represents the sleep status of a given RU:
+Define a $N\times4$ matrix $\mathcal{B}$, which represents the sleep status of a given RU:
 
 ```math
-\mathcal{B}=[b_1,b_2,\cdots,b_{\mathcal{N}}]
+\mathcal{B}=\begin{bmatrix}
+b_{1,1} & b_{1,2} & b_{1,3} & b_{1,4} \\
+b_{2,1} & b_{2,2} & b_{2,3} & b_{2,4} \\
+\vdots  & \vdots & \vdots & \vdots \\
+b_{N,1} & b_{N,2} & b_{N,3} & b_{N,4}
+\end{bmatrix}
 ```
 
-where
+where we have some row $\mathcal{B}(i,:)$,
+
 ```math
-b_i=\begin{cases}
-1 & \text{RU } r_i \text{ is active}\\
-0 & \text{RU } r_i \text{ is asleep}
-\end{cases}
+\mathcal{B}(i,:)=[b_{i,1}, b_{i,2}, b_{i,3}, b_{i,4}]
 ```
+
+which is nonzero everywhere, except for one entry $b_{i,n}$, which represents RU $i$ being in ASM $n$, as found in 3GPP specifications.
+
 Define a vector $\mathcal{F} \in \mathbb{R}^{L}$, which represents the sleep status of a given DU:
 ```math
 \mathcal{F}=[f_1,f_2,\cdots,f_L]
@@ -171,7 +141,7 @@ Additionally, define the term $\mathcal{W}$,
 
 At time $t$, define $\mathfrak{R}$ to be our reward function:
 ```math
-\mathfrak{R}^{(t)}=\frac{\alpha(\sum_{u\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u)+\sum_{d\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d)+\sum_{r\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta\mathcal{W}\sum_{r\in\mathcal{R}}\delta(r)}{2W}
+\mathfrak{R}^{(t)}=\frac{\alpha(\sum_{u\in\mathcal{U}}\mathfrak{R}^{(t)}_\text{RSRP}(u)+\sum_{d\in\mathcal{D}}\mathfrak{R}^{(t)}_\text{DU capacity}(d)+\sum_{r\in\mathcal{R}}\mathfrak{R}^{(t)}_\text{RU capacity}(r) + |\mathcal{R}_\text{sleep}| + |\mathcal{D}_\text{sleep}|)-\beta\mathcal{W}\sum_{r\in\mathcal{R}}\delta(r)}{2\mathcal{W}}
 ```
 where
 ```math
