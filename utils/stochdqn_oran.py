@@ -20,11 +20,15 @@ class StochDQNNetwork(nn.Module):
         self.loss: nn.MSELoss = nn.MSELoss() 
         self.fc1: nn.Linear = nn.Linear(input_size,  hidden_size)
         self.fc2: nn.Linear = nn.Linear(hidden_size, hidden_size)
+        self.fc3: nn.Linear = nn.Linear(hidden_size, hidden_size)
+        self.fc4: nn.Linear = nn.Linear(hidden_size, hidden_size)
         self.fcq: nn.Linear = nn.Linear(hidden_size, output_size)
         
     def forward(self, x: torch.Tensor):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
+        x = torch.relu(self.fc3(x))
+        x = torch.relu(self.fc4(x))
         x = self.fcq(x)
         return x
     
@@ -66,7 +70,7 @@ class StochDQNAgent:
         self.L = numDUs
         self.N = numRUs
         self.simulation_length_in_training = simulation_length_in_training
-        self.model: StochDQNNetwork = StochDQNNetwork(self.N*self.K+self.K*2+self.L+self.N*self.L, self.N*self.L+self.L+self.N+1)
+        self.model: StochDQNNetwork = StochDQNNetwork(self.N*self.L, self.N*self.L+self.L+self.N+1)
         self.target_model: StochDQNNetwork = copy.deepcopy(self.model).to(self.device).eval()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -146,7 +150,7 @@ class StochDQNAgent:
         returns: list[float] = []
         for episode in range(1,episodes+1):
             print(f"Episode {episode}/{episodes}")
-            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N, self.L, self.K,1000,0)
+            NS: network_oran.NetworkSimulation = network_oran.NetworkSimulation(self.N, self.L, self.K,1000,False,0)
             NS.running = True
             while NS.running:
                 NS.initialize_components()
@@ -200,9 +204,10 @@ class StochDQNAgent:
                 
                 self.epsilon = self.epsilon_min + (self.epsilon_max - self.epsilon_min) * np.exp(-self.epsilon_decay * episode)
                 break
-            for turtle in NS.screen.turtles():
-                del turtle
-            NS.screen.clearscreen()
+            if NS.graphics:
+                for turtle in NS.screen.turtles():
+                    del turtle
+                NS.screen.clearscreen()
             if episode % 100 == 0:
                 self.writeEpisodeResults(episode,self.simulation_length_in_training,returns)
         

@@ -82,7 +82,7 @@ class Point:
         return np.sqrt(pow(self.x-other_point.x,2) + pow(self.y-other_point.y,2))
 
 class O_RU:
-    def __init__(self, p: Point)->None:
+    def __init__(self, p: Point, show_graphics=False)->None:
         self.p: Point = p
         self.active = True
         self.connected_ues: set = set()
@@ -98,10 +98,13 @@ class O_RU:
         
         #self.fieldOFDM: matrix = matrix(fromfunction(lambda i, j: ), ())
 
-        self.initialize_turtle()
+        if show_graphics:
+            self.initialize_turtle()
+        self.graphics = show_graphics
         
     def __del__(self)->None:
-        del self.turtle
+        if self.graphics:
+            del self.turtle
 
     def initialize_turtle(self)->None:
         self.turtle = turtle.Turtle()
@@ -134,7 +137,8 @@ class O_RU:
         return self.connected_du # type: ignore
 
     def sleep(self)->None:
-        self.turtle.shape(RU_OFF_IMAGE)
+        if self.graphics:
+            self.turtle.shape(RU_OFF_IMAGE)
         self.active = False
 
         ue: UE
@@ -142,7 +146,8 @@ class O_RU:
             ue.detach_from_ru()
 
     def wake(self)->None:
-        self.turtle.shape(RU_IMAGE)
+        if self.graphics:
+            self.turtle.shape(RU_IMAGE)
         self.active = True
         
     def status(self)->bool:
@@ -157,14 +162,16 @@ class O_RU:
 
 
 class O_DU:
-    def __init__(self, p: Point)->None:
+    def __init__(self, p: Point, show_graphics=False)->None:
         self.p = p
         self.connected_rus: set = set()
         self.active = True
         
         self.processing_load = 0 #percent
 
-        self.initialize_turtle()
+        if show_graphics:
+            self.initialize_turtle()
+        self.graphics = show_graphics
 
     def initialize_turtle(self):
         self.turtle = turtle.Turtle()
@@ -194,11 +201,13 @@ class O_DU:
         return self.p
     
     def sleep(self)->None:
-        self.turtle.shape(DU_OFF_IMAGE)
+        if self.graphics:
+            self.turtle.shape(DU_OFF_IMAGE)
         self.active = False
 
     def wake(self)->None:
-        self.turtle.shape(DU_IMAGE)
+        if self.graphics:
+            self.turtle.shape(DU_IMAGE)
         self.active = True
 
     def get_processing_load(self)->float:
@@ -213,15 +222,19 @@ class O_DU:
         return self.active
 
 class UE:
-    def __init__(self, p: Point)->None:
+    def __init__(self, p: Point, show_graphics=False)->None:
         self.p: Point = p
         self.RU: O_RU | None = None
         self.freq: int = 3300 # MHz
+        if show_graphics:
+            self.initialize_turtle()
+        self.graphics = show_graphics
 
+    def initialize_turtle(self)->None:
         self.turtle = turtle.Turtle()
         self.turtle.penup()
         self.turtle.speed(0)
-        self.turtle.setposition(p.x/GRAPHICAL_SCALING_FACTOR,p.y/GRAPHICAL_SCALING_FACTOR)
+        self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
         self.turtle.shape(UE_IMAGE)
         self.turtle.setheading(90)
 
@@ -230,7 +243,9 @@ class UE:
     
     def walk(self, d: Point)->None:
         self.p += d
-        self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
+        
+        if self.graphics:
+            self.turtle.setposition(self.p.x/GRAPHICAL_SCALING_FACTOR,self.p.y/GRAPHICAL_SCALING_FACTOR)
     
     def detach_from_ru(self)->None:
         if self.RU:
@@ -247,7 +262,7 @@ class UE:
         return self.RU # type: ignore
 
 class NetworkSimulation:
-    def __init__(self, n: int, m: int, k: int, s: float, dt=0.1, seed=42)->None:
+    def __init__(self, n: int, m: int, k: int, s: float, show_graphics: bool = False, dt=0.1, seed=42)->None:
         self.main_loop_step = -1
         self.running = False
         
@@ -267,53 +282,21 @@ class NetworkSimulation:
         self.simulation_side_length = s # in meters
         self.time_step_length = dt # amount of time one frame goes for
         self.total_energy_consumption = 0 # in watts
-
-        self.screen: turtle._Screen = turtle.Screen()
-        self.screen.setup(width=1500,height=1500)
-        self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
-        self.screen.tracer(0)
-
-        self.screen.register_shape(UE_IMAGE)
-        self.screen.register_shape(RU_IMAGE)
-        self.screen.register_shape(DU_IMAGE)
-        self.screen.register_shape(RU_OFF_IMAGE)
-        self.screen.register_shape(DU_OFF_IMAGE)
-
-        self.ue_connection_turtle = turtle.Turtle()
-        self.ue_connection_turtle.speed(0)
-        self.ue_connection_turtle.penup()
-        self.ue_connection_turtle.pencolor("blue")
-        self.ue_connection_turtle.hideturtle()
-
-        self.ru_du_connection_turtle = turtle.Turtle()
-        self.ru_du_connection_turtle.speed(0)
-        self.ru_du_connection_turtle.penup()
-        self.ru_du_connection_turtle.pencolor("green")
-        self.ru_du_connection_turtle.hideturtle()
-
-        self.simulation_statistics_turtle = turtle.Turtle()
-        self.simulation_statistics_turtle.speed(0)
-        self.simulation_statistics_turtle.penup()
-        self.simulation_statistics_turtle.hideturtle()
         
-    def generate_channel_quality_matrix(self) -> torch.Tensor:
-        mathcalH = np.fromfunction(np.vectorize(lambda i,j: rsrp(self.rus[int(i)],self.ues[int(j)])) ,(self.num_rus, self.num_ues), dtype=float )
-        return torch.tensor(mathcalH, dtype=torch.float32)
-    
-    def generate_geolocation_matrix(self) -> torch.Tensor:
-        G = np.fromfunction(np.vectorize(lambda i,j: self.ues[i].get_position().x if j == 0 else self.ues[i].get_position().y), (self.num_ues,2), dtype=float)
-        return torch.tensor(G, dtype=torch.float32)
-    
-    def generate_fronthaul_delay_matrix(self) -> torch.Tensor:
-        mathcalP = np.fromfunction(np.vectorize(lambda i,j: calculate_fronthaul_delay(self.rus[j], self.dus[i])), (self.num_dus, self.num_rus), dtype=float)
-        return torch.tensor(mathcalP, dtype=torch.float32)
+        self.graphics = show_graphics
 
-    def generate_processing_load_vector(self) -> torch.Tensor:
-        mathcalZ = [self.dus[unit].get_processing_load() for unit in self.dus]
-        return torch.tensor(mathcalZ, dtype=torch.float32)
+    def generate_delay_matrix(self)->torch.Tensor:
+        delay_matrix: torch.Tensor = torch.zeros((self.num_rus,self.num_dus))
+        ru: int
+        du: int
+        for ru in range(self.num_rus):
+            for du in range(self.num_dus):
+                if len(self.rus[ru].get_connected_ues()) != 0:
+                    delay_matrix[ru][du] = calculate_fronthaul_delay(self.rus[ru],self.dus[du])*(sum([rsrp(self.rus[ru], ue) for ue in self.rus[ru].get_connected_ues()])/len(self.rus[ru].get_connected_ues()))
+        return delay_matrix
 
     def generate_state_vector(self) -> torch.Tensor:
-        return torch.flatten(torch.cat([torch.flatten(self.generate_channel_quality_matrix()),torch.flatten(self.generate_geolocation_matrix()),torch.flatten(self.generate_fronthaul_delay_matrix()),torch.flatten(self.generate_processing_load_vector())], 0))
+        return torch.flatten(self.generate_delay_matrix())
     
     def calculate_ru_power_reward(self) -> float:
         r = 0
@@ -335,8 +318,13 @@ class NetworkSimulation:
     def calculate_sleep_reward(self) -> float:
         return (len([unit for unit in self.rus.values() if unit.status()]) + len([unit for unit in self.dus.values() if unit.status()]))
     
+    def calculate_normalizer_term(self) -> float:
+        num_ru_sleep = len([unit for unit in self.rus.values() if not unit.status()])
+        num_du_sleep = len([unit for unit in self.dus.values() if not unit.status()])
+        return (self.num_ues + self.num_dus + num_ru_sleep + num_du_sleep)/((1-c)*self.num_rus)
+    
     def calculate_reward(self) -> torch.Tensor: 
-        return torch.tensor(((self.calculate_ru_power_reward() + self.calculate_sleep_reward() + self.calculate_du_capacity_reward() + self.calculate_ru_capacity_reward())*self.alpha - self.beta*self.calculate_average_fronthaul_delay()), dtype=torch.float32)
+        return torch.tensor(((self.calculate_ru_power_reward() + self.calculate_sleep_reward() + self.calculate_du_capacity_reward() + self.calculate_ru_capacity_reward())*self.alpha - self.beta*self.calculate_normalizer_term()*self.calculate_average_fronthaul_delay())/2*self.calculate_normalizer_term(), dtype=torch.float32)
 
     def update_total_energy_consumption(self) -> None:
         # The DUs in this simulation are based on a generic 2nd Gen Intel Xeon processor
@@ -433,33 +421,34 @@ class NetworkSimulation:
             newUE = UE(create_random_point(self.simulation_side_length/2))
             self.ues[id] = newUE
 
-        self.screen: turtle._Screen = turtle.Screen()
-        self.screen.setup(width=1500,height=1500)
-        self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
-        self.screen.tracer(0)
+        if self.graphics:
+            self.screen: turtle._Screen = turtle.Screen()
+            self.screen.setup(width=1500,height=1500)
+            self.screen.title("Stochastic DQN Model for Joint Optimization of Delay and Energy Efficiency Simulation")
+            self.screen.tracer(0)
 
-        self.screen.register_shape(UE_IMAGE)
-        self.screen.register_shape(RU_IMAGE)
-        self.screen.register_shape(DU_IMAGE)
-        self.screen.register_shape(RU_OFF_IMAGE)
-        self.screen.register_shape(DU_OFF_IMAGE)
+            self.screen.register_shape(UE_IMAGE)
+            self.screen.register_shape(RU_IMAGE)
+            self.screen.register_shape(DU_IMAGE)
+            self.screen.register_shape(RU_OFF_IMAGE)
+            self.screen.register_shape(DU_OFF_IMAGE)
 
-        self.ue_connection_turtle = turtle.Turtle()
-        self.ue_connection_turtle.speed(0)
-        self.ue_connection_turtle.penup()
-        self.ue_connection_turtle.pencolor("blue")
-        self.ue_connection_turtle.hideturtle()
+            self.ue_connection_turtle = turtle.Turtle()
+            self.ue_connection_turtle.speed(0)
+            self.ue_connection_turtle.penup()
+            self.ue_connection_turtle.pencolor("blue")
+            self.ue_connection_turtle.hideturtle()
 
-        self.ru_du_connection_turtle = turtle.Turtle()
-        self.ru_du_connection_turtle.speed(0)
-        self.ru_du_connection_turtle.penup()
-        self.ru_du_connection_turtle.pencolor("green")
-        self.ru_du_connection_turtle.hideturtle()
+            self.ru_du_connection_turtle = turtle.Turtle()
+            self.ru_du_connection_turtle.speed(0)
+            self.ru_du_connection_turtle.penup()
+            self.ru_du_connection_turtle.pencolor("green")
+            self.ru_du_connection_turtle.hideturtle()
 
-        self.simulation_statistics_turtle = turtle.Turtle()
-        self.simulation_statistics_turtle.speed(0)
-        self.simulation_statistics_turtle.penup()
-        self.simulation_statistics_turtle.hideturtle()
+            self.simulation_statistics_turtle = turtle.Turtle()
+            self.simulation_statistics_turtle.speed(0)
+            self.simulation_statistics_turtle.penup()
+            self.simulation_statistics_turtle.hideturtle()
 
     def write_results(self)->None:
         data = {
@@ -502,17 +491,17 @@ class NetworkSimulation:
 
     def step(self, step: int)->None:
         self.main_loop_step = step
-        self.ue_connection_turtle.clear()
-        self.ru_du_connection_turtle.clear()
-        self.simulation_statistics_turtle.clear()
-
-        self.update_statistics_display(step)
-
-        self.update_component_connection_display()
+        if self.graphics:
+            self.ue_connection_turtle.clear()
+            self.ru_du_connection_turtle.clear()
+            self.simulation_statistics_turtle.clear()
+            self.update_statistics_display(step)
+            self.update_component_connection_display()
 
         self.update_ues()
         self.update_total_energy_consumption()
-        self.screen.update()
+        if self.graphics:
+            self.screen.update()
         
     def run(self, simulation_length: int)->None:
         self.initialize_components()

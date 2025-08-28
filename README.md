@@ -38,7 +38,7 @@ h^{(t)}_2 \\
 h^{(t)}_\mathcal{N}
 \end{bmatrix}
 ```
-where $h^{(t)}_{i}$ is the mean RSRP of RU $i$.
+where $h^{(t)}_{i}$ is the mean RSRP of RU $i$ and its associated UEs.
 
 We define the $\mathcal{N} \times L$ delay matrix $\mathcal{M}$
 ```math
@@ -60,7 +60,7 @@ from RU $\mathcal{R}_i$ to DU $\mathcal{D}_j$.
 We represent our state with the matrix $s^{(t)}$,
 
 ```math
-s^{(t)}\triangleq \mathcal{M}\mathcal{H}^\intercal
+s^{(t)}\triangleq [h_1\mathcal{M}(:,1)|h_2\mathcal{M}(:,2)|\cdots|h_L\mathcal{M}(:,L)]
 ```
 ### 2. Action space
 The action space here is discrete-- we only want the agent to be able to reassign RUs to DUs and either wake up RUs/DUs or put them to sleep.
